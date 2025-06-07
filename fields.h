@@ -1,11 +1,59 @@
+/*
+ * This file is part of the dsmr_custom ESPHome component.
+ *
+ * Copyright (c) 2025 (Niko Paulanne)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/**
+ * Arduino DSMR parser.
+ *
+ * This software is licensed under the MIT License.
+ *
+ * Copyright (c) 2015 Matthijs Kooijman <matthijs@stdin.nl>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 /**
  * @file fields.h
  * @brief Vendored and modified field definitions from glmnet/arduino-dsmr.
- * @details Defines structures and macros for representing and parsing individual
- * data fields found in DSMR P1 telegrams. This version includes modifications
- * to the DEFINE_FIELD macro for ESPHome compatibility (compilation fixes, style)
- * and uses custom preprocessor defines for M-Bus channel IDs. All accesses to
- * ParseResult members use trailing underscores. Adapted for flattened structure.
+ * @details Defines structures and macros for representing DSMR P1 telegram data fields.
+ * This version includes modifications to the DEFINE_FIELD macro for ESPHome
+ * compatibility and uses custom preprocessor defines for M-Bus channel IDs.
+ * @author Niko Paulanne
+ * @note This file is part of a vendored copy of the glmnet/arduino-dsmr parser.
+ * It has been included and modified for the dsmr_custom ESPHome component.
  */
 
 // BEGIN MODIFICATION FOR ESPHOME DSMR_CUSTOM
