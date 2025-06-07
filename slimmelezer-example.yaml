@@ -1,0 +1,320 @@
+# slimmelezer-example.yaml
+#
+# This is a comprehensive example configuration for the dsmr_custom component,
+# showcasing many of its features, including a detailed list of custom OBIS sensors
+# for Finnish smart meters (SESKO standard).
+#
+# How to use this file:
+# 1. Copy this file to your ESPHome configuration directory.
+# 2. Rename it to something meaningful, e.g., 'my_meter_reader.yaml'.
+# 3. Create a 'secrets.yaml' file in the same directory to store your private credentials.
+# 4. Review and adjust the settings below, especially WiFi credentials and custom OBIS sensors.
+
+# --- Substitutions ---
+# Use substitutions to easily change values in one place.
+substitutions:
+  # Choose a name for your device. This will be its hostname.
+  device_name: slimmelezer-dsmr
+
+
+# --- Core ESPHome Configuration ---
+esphome:
+  name: ${device_name}
+  name_add_mac_suffix: false # Set to true if you have multiple devices with the same name
+  project:
+    name: nikop.slimmelezer_dsmr_custom
+    version: "2025.6.1"
+
+  # The on_boot sequence is used here to apply a stored decryption key.
+  # This is an advanced feature for meters that use encrypted telegrams (e.g., in Luxembourg).
+  # For most users (e.g., in Finland), this section can be ignored or removed.
+  on_boot:
+    priority: -100 # Run early during boot.
+    then:
+      - if:
+          condition:
+            lambda: return id(has_key); # Check if a key is stored in globals
+          then:
+            - logger.log: "DSMR_CUSTOM: Applying stored decryption key on boot."
+            - lambda: |-
+                if (id(has_key)) {
+                  std::string key_value(id(stored_decryption_key), 32);
+                  id(dsmr_hub).set_decryption_key(key_value);
+                }
+          else:
+            - logger.log:
+                level: INFO
+                tag: "dsmr_custom"
+                format: "Decryption not used. To set a key, use the 'set_dsmr_key' service."
+
+# --- Hardware & Board Configuration ---
+esp8266:
+  board: d1_mini # Change this to match your ESP8266 board (e.g., nodemcuv2)
+  restore_from_flash: true # Restore component states from flash on boot
+  framework:
+    version: 3.1.2 # Specify framework version for stability
+
+# --- API & Services ---
+# The native API for communication with Home Assistant.
+api:
+  # IMPORTANT: Store your API encryption key in 'secrets.yaml'.
+  # Example 'secrets.yaml' entry:
+  # esphome_api_encryption_key: "YOUR_32_CHARACTER_BASE64_API_KEY_HERE"
+  encryption:
+    key: !secret esphome_api_encryption_key
+
+  # This service allows setting the DSMR decryption key dynamically from Home Assistant.
+  # This is an advanced feature. If you don't use encrypted telegrams, you can remove this service.
+  services:
+    - service: set_dsmr_key
+      variables:
+        private_key: string
+      then:
+        - logger.log:
+            format: "API: Setting DSMR decryption key. To disable, send an empty string."
+            args: [private_key.c_str()]
+        - lambda: |-
+            if (private_key.length() == 32) {
+              private_key.copy(id(stored_decryption_key), 32);
+              id(stored_decryption_key)[32] = '\0';
+              id(dsmr_hub).set_decryption_key(private_key);
+            } else {
+              id(stored_decryption_key)[0] = '\0';
+              id(dsmr_hub).set_decryption_key("");
+            }
+        - globals.set:
+            id: has_key
+            value: !lambda "return private_key.length() == 32;"
+
+# --- WiFi Configuration ---
+wifi:
+  # IMPORTANT: Store your WiFi credentials in 'secrets.yaml'.
+  # Example 'secrets.yaml' entries:
+  # wifi_ssid: "YourWiFiNetworkName"
+  # wifi_password: "YourWiFiPassword"
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Fallback Access Point - creates a WiFi network if your main WiFi is unavailable.
+  ap:
+    ssid: "${device_name} Fallback AP"
+
+  # --- Manual IP (Optional) ---
+  # Using a static IP is recommended for reliability.
+  # If you use this, make sure the IP address is outside your router's DHCP range.
+  #
+  # manual_ip:
+  #   static_ip: 192.168.1.100
+  #   gateway: 192.168.1.1
+  #   subnet: 255.255.255.0
+
+  power_save_mode: none # Recommended for DSMR readers to ensure responsiveness.
+  reboot_timeout: 5min # Reboot if WiFi is disconnected for too long.
+
+# Allows rebooting the device into safe mode for troubleshooting.
+safe_mode:
+
+# Fallback web portal if WiFi connection fails.
+captive_portal:
+
+# --- Debugging & Logging ---
+# The logger component for viewing logs via USB or Home Assistant.
+logger:
+  baud_rate: 0 # Disable logging to UART0 (USB) to free up pins if needed. Set to 115200 to enable.
+  level: INFO # Default log level. Change to DEBUG for more verbose output.
+  logs:
+    dsmr_custom: DEBUG # Set specific log level for our custom component
+
+# Enable remote updates for this device.
+ota:
+  platform: esphome
+
+# --- Globals ---
+# Global variables are used to store state across different parts of the YAML.
+# This section is primarily for the advanced decryption key management and heap monitoring.
+# You can safely ignore this if you don't use these features.
+globals:
+  - id: has_key
+    type: bool
+    restore_value: "true"
+    initial_value: "false"
+  - id: stored_decryption_key
+    type: char[33]
+    restore_value: "true"
+
+
+# --- UART Configuration ---
+# The UART bus is the serial interface used to communicate with the P1 port.
+uart:
+  id: uart_bus
+  baud_rate: 115200
+  rx_pin: D7 # This is the GPIO pin connected to the P1 port's data line.
+  # The buffer must be large enough to hold the entire P1 telegram.
+  rx_buffer_size: 1700
+
+# --- External Component Definition ---
+# This tells ESPHome where to find the dsmr_custom component files.
+external_components:
+  - source:
+      # Assuming the 'dsmr-custom' repo is cloned into a 'custom_components'
+      # directory next to your YAML file.
+      type: local
+      path: custom_components/
+    components: [ dsmr_custom ]
+
+# --- DSMR Custom Component Configuration ---
+# This is the main configuration block for the custom component.
+dsmr_custom:
+  id: dsmr_hub
+  uart_id: uart_bus
+  max_telegram_length: 1700
+  crc_check: true
+  receive_timeout: "600ms"
+  # For meters that need an active signal to send data, uncomment the following:
+  # request_pin: D5
+  # request_interval: "10s"
+
+  # --- Custom OBIS Sensors ---
+  # This is the most powerful feature of dsmr_custom.
+  # Define sensors for ANY OBIS code your meter provides.
+  # The list below is an extensive example for a Finnish (SESKO) meter.
+  # NOTE: Check your own meter's documentation for the correct OBIS codes!
+  custom_obis_sensors:
+    - code: "1-0:1.8.0"
+      name: "Active energy import"
+      type: sensor
+      unit_of_measurement: "kWh"
+      state_class: total_increasing
+      device_class: energy
+      accuracy_decimals: 3
+      icon: mdi:home-import-outline
+    - code: "1-0:2.8.0"
+      name: "Active energy export"
+      type: sensor
+      unit_of_measurement: "kWh"
+      state_class: total_increasing
+      device_class: energy
+      accuracy_decimals: 3
+      icon: mdi:home-export-outline
+    - code: "1-0:3.8.0"
+      name: "Reactive energy import"
+      type: sensor
+      unit_of_measurement: "kvarh"
+      state_class: total_increasing
+      accuracy_decimals: 3
+      icon: mdi:sine-wave
+    - code: "1-0:4.8.0"
+      name: "Reactive energy export"
+      type: sensor
+      unit_of_measurement: "kvarh"
+      state_class: total_increasing
+      accuracy_decimals: 3
+      icon: mdi:sine-wave
+    - code: "1-0:1.7.0"
+      name: "Active power import"
+      type: sensor
+      unit_of_measurement: "kW"
+      device_class: power
+      accuracy_decimals: 2
+      state_class: measurement
+      icon: mdi:flash
+    - code: "1-0:2.7.0"
+      name: "Active power export"
+      type: sensor
+      unit_of_measurement: "kW"
+      device_class: power
+      accuracy_decimals: 2
+      state_class: measurement
+      icon: mdi:flash-outline
+    - code: "1-0:32.7.0"
+      name: "Phase voltage L1"
+      type: sensor
+      unit_of_measurement: "V"
+      device_class: voltage
+      accuracy_decimals: 1
+      state_class: measurement
+      icon: mdi:lightning-bolt
+    - code: "1-0:52.7.0"
+      name: "Phase voltage L2"
+      type: sensor
+      unit_of_measurement: "V"
+      device_class: voltage
+      accuracy_decimals: 1
+      state_class: measurement
+      icon: mdi:lightning-bolt
+    - code: "1-0:72.7.0"
+      name: "Phase voltage L3"
+      type: sensor
+      unit_of_measurement: "V"
+      device_class: voltage
+      accuracy_decimals: 1
+      state_class: measurement
+      icon: mdi:lightning-bolt
+    - code: "1-0:31.7.0"
+      name: "Phase current L1"
+      type: sensor
+      unit_of_measurement: "A"
+      device_class: current
+      accuracy_decimals: 2
+      state_class: measurement
+      icon: mdi:current-ac
+    - code: "1-0:51.7.0"
+      name: "Phase current L2"
+      type: sensor
+      unit_of_measurement: "A"
+      device_class: current
+      accuracy_decimals: 2
+      state_class: measurement
+      icon: mdi:current-ac
+    - code: "1-0:71.7.0"
+      name: "Phase current L3"
+      type: sensor
+      unit_of_measurement: "A"
+      device_class: current
+      accuracy_decimals: 2
+      state_class: measurement
+      icon: mdi:current-ac
+    - code: "0-0:1.0.0" # Example of a text sensor
+      name: "P1 Telegram Timestamp"
+      type: text_sensor
+      icon: mdi:clock-time-eight
+    # Add or remove sensors based on your meter's output.
+
+# --- Standard Sensor Platforms (Alternative Method) ---
+# You can also define common sensors here. If a sensor with the same OBIS code
+# is defined in `custom_obis_sensors`, the custom one will be used.
+# Most users will prefer the custom_obis_sensors list above.
+#
+# sensor:
+#   - platform: dsmr_custom
+#     dsmr_custom_hub_id: dsmr_hub
+#     power_delivered:
+#       name: "Standard Power Delivered"
+#     energy_delivered_tariff1:
+#       name: "Standard Energy Delivered T1"
+
+# --- Other Sensors (Device Health, etc.) ---
+sensor:
+  - platform: uptime
+    name: "${device_name} Uptime"
+  - platform: wifi_signal
+    name: "${device_name} Wi-Fi Signal"
+    update_interval: 60s
+
+# --- Text Sensors ---
+text_sensor:
+  # It's highly recommended to expose the P1 header for debugging.
+  # This helps verify that the meter is communicating and shows its identification string.
+  - platform: dsmr_custom
+    dsmr_custom_hub_id: dsmr_hub
+    identification:
+      name: "${device_name} P1 Telegram Header"
+      icon: mdi:barcode-scan
+  - platform: version
+    name: "ESPHome Version"
+    hide_timestamp: true
+
+# --- Buttons for Actions ---
+button:
+  - platform: restart
+    name: "${device_name} Restart"
