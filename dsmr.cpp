@@ -1,13 +1,31 @@
+/*
+ * This file is part of the dsmr_custom ESPHome component.
+ *
+ * Copyright (c) 2025 (Niko Paulanne)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 /**
  * @file dsmr.cpp
  * @brief Implementation of the Dsmr class for the dsmr_custom ESPHome component.
- * @details This file contains the core logic for P1 port communication, telegram parsing
- * (including AES-GCM decryption), custom OBIS code processing, sensor data publishing,
- * and the sensor override mechanism. It interacts with a vendored and modified
- * version of the glmnet/arduino-dsmr parser library, with source files now
- * located directly within the component's root directory.
- * @author (Your Name/Alias)
- * @date June 4, 2025
+ * @details This file contains the core logic for the DSMR hub. Its architecture is
+ * inspired by the native ESPHome DSMR component, but it has been specifically
+ * implemented to support custom OBIS sensors and to interact with a modified
+ * local parser for enhanced compatibility.
+ * @author Niko Paulanne
+ * @date June 7, 2025
  */
 
 #ifdef USE_ARDUINO // Guard for Arduino-based platforms
