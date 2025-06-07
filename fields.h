@@ -1,20 +1,17 @@
-/*
- * This file is part of the dsmr_custom ESPHome component.
+/**
+ * NOTE: This is a vendored and modified version of a file from the
+ * glmnet/Dsmr project. The original license is preserved below.
  *
- * Copyright (c) 2025 (Niko Paulanne)
+ * Modifications are Copyright (c) 2025 (Niko Paulanne).
+ * These modifications are licensed under the GPLv3, as part of the
+ * dsmr_custom ESPHome component.
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * Summary of modifications:
+ * - Added unique include guards for the dsmr_custom component.
+ * - Modified DEFINE_FIELD macro to resolve a `reinterpret_cast` compilation error
+ * and to use ESPHome-style member names with trailing underscores.
+ * - Added preprocessor defines for configurable M-Bus channel IDs.
+ * - Updated all ParseResult member accesses to use trailing underscores (e.g., .err_).
  */
 
 /**
