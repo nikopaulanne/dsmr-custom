@@ -1,12 +1,17 @@
-/*
- * This file is part of the dsmr_custom ESPHome component.
+/**
+ * NOTE: This is a vendored and modified version of a file from the
+ * glmnet/Dsmr project. The original license is preserved below.
  *
- * Copyright (c) 2025 (Niko Paulanne)
+ * Modifications are Copyright (c) 2025 (Niko Paulanne).
+ * These modifications are licensed under the GPLv3, as part of the
+ * dsmr_custom ESPHome component.
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Summary of modifications:
+ * - Added unique include guards for the dsmr_custom component.
+ * - Changed member variable access to use trailing underscores (e.g., .err_).
+ * - Modified P1Parser::parse_data for lenient P1 header validation to support
+ * a wider range of meters (e.g., Finnish models).
+ * - Included esphome/core/log.h for logging checksum mismatches.
  */
 
 /*
