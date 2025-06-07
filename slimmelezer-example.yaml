@@ -169,11 +169,11 @@ uart:
 # This tells ESPHome where to find the dsmr_custom component files.
 external_components:
   - source:
-      # Assuming the 'dsmr-custom' repo is cloned into a 'custom_components'
-      # directory next to your YAML file.
-      type: local
-      path: custom_components/
+      type: git
+      url: https://github.com/nikopaulanne/dsmr-custom
+      ref: main
     components: [ dsmr_custom ]
+    
 
 # --- DSMR Custom Component Configuration ---
 # This is the main configuration block for the custom component.
