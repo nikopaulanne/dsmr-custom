@@ -22,8 +22,10 @@
  * @brief Header file for the Dsmr (dsmr_custom) ESPHome component hub.
  * @details This component provides enhanced P1 port reading capabilities, featuring
  * user-definable OBIS code sensors, support for encrypted telegrams, and a
- * sensor override mechanism. It utilizes a vendored and modified version of the
- * glmnet/arduino-dsmr parser library.
+ * sensor override mechanism. Its architecture is
+ * inspired by the native ESPHome DSMR component, but it has been specifically
+ * implemented to support custom OBIS sensors and to interact with a modified
+ * local parser for enhanced compatibility.
  * @author Niko Paulanne
  * @date June 7, 2025
  */
