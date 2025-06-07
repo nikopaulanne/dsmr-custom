@@ -1,14 +1,32 @@
-    /**
-     * @file dsmr.h
-     * @brief Header file for the Dsmr (dsmr_custom) ESPHome component hub.
-     * @details This component provides enhanced P1 port reading capabilities, featuring
-     * user-definable OBIS code sensors, support for encrypted telegrams, and a
-     * sensor override mechanism. It now utilizes a vendored and modified version of the
-     * glmnet/arduino-dsmr parser library, with source files located directly within
-     * the component's root directory.
-     * @author (Your Name/Alias)
-     * @date June 4, 2025
-     */
+/*
+ * This file is part of the dsmr_custom ESPHome component.
+ *
+ * Copyright (c) 2025 (Niko Paulanne)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/**
+ * @file dsmr.h
+ * @brief Header file for the Dsmr (dsmr_custom) ESPHome component hub.
+ * @details This component provides enhanced P1 port reading capabilities, featuring
+ * user-definable OBIS code sensors, support for encrypted telegrams, and a
+ * sensor override mechanism. It utilizes a vendored and modified version of the
+ * glmnet/arduino-dsmr parser library.
+ * @author Niko Paulanne
+ * @date June 7, 2025
+ */
 
     #ifndef DSMR_CUSTOM_HUB_DSMR_H // Unique include guard for your hub component
     #define DSMR_CUSTOM_HUB_DSMR_H
