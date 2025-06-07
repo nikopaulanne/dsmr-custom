@@ -1,20 +1,48 @@
+/*
+ * This file is part of the dsmr_custom ESPHome component.
+ *
+ * Copyright (c) 2025 (Niko Paulanne)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+/*
+ * Arduino DSMR parser.
+ *
+ * This software is licensed under the MIT License.
+ *
+ * Copyright (c) 2015 Matthijs Kooijman <matthijs@stdin.nl>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 /**
  * @file parser.h
  * @brief Vendored and modified P1 telegram parser core from glmnet/arduino-dsmr.
- * @details Defines the main parsing logic, including the P1Parser class and supporting
- * structures for handling DSMR telegram data. This version includes modifications
- * for enhanced compatibility (e.g., lenient P1 header parsing) and integration
- * within the ESPHome dsmr_custom component. All accesses to ParseResult members
- * have been updated to use trailing underscores (e.g., result_, next_, err_).
- *
- * @note This file is part of a vendored copy of the glmnet/arduino-dsmr parser,
- * which itself is based on matthijskooijman/arduino-dsmr.
- * Original library (glmnet): https://github.com/glmnet/arduino-dsmr
- * It has been included locally in the ESPHome dsmr_custom component.
- * Modifications are marked and explained.
- *
- * Original Copyright (c) 2015 Matthijs Kooijman <matthijs@stdin.nl>
- * Licensed under the MIT License. (Assumed, as per base library)
+ * @details Defines the main P1Parser class. This version includes lenient header
+ * parsing and uses consistent underscored member access for utility structs.
+ * @author Niko Paulanne
  */
 
 // BEGIN MODIFICATION FOR ESPHOME DSMR_CUSTOM
