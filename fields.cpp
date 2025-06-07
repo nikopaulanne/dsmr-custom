@@ -1,12 +1,15 @@
-/*
- * This file is part of the dsmr_custom ESPHome component.
+/**
+ * NOTE: This is a vendored and modified version of a file from the
+ * glmnet/Dsmr project. The original license is preserved below.
  *
- * Copyright (c) 2025 (Niko Paulanne)
+ * Modifications are Copyright (c) 2025 (Niko Paulanne).
+ * These modifications are licensed under the GPLv3, as part of the
+ * dsmr_custom ESPHome component.
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Summary of modifications:
+ * - This file provides storage definitions for static members from the modified fields.h.
+ * - Updated definitions to match the modified DEFINE_FIELD macro, which now generates
+ * members with trailing underscores (e.g., `id_`, `name_progmem_`).
  */
 
 /*
