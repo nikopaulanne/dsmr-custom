@@ -171,7 +171,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: main
+      ref: v1.0.0
     components: [ dsmr_custom ]
     
 
