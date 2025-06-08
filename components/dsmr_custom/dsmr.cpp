@@ -133,7 +133,7 @@ void Dsmr::setup() {
   if (this->request_pin_ != nullptr) {
     this->request_pin_->setup();
     this->request_pin_->digital_write(false);
-    ESP_LOGCONFIG(TAG, "DSMR Request Pin initialized: %s", this->request_pin_->get_pin_name_friendly().c_str());
+    LOG_PIN("  Request Pin: ", this->request_pin_);
   }
 }
 
