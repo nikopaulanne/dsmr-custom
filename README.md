@@ -1,6 +1,6 @@
 # dsmr-custom - Enhanced DSMR P1 Component for ESPHome
 
-**Version:** 1.0.0
+**Version:** 1.0.2
 
 **ESPHome Compatibility:** 2025.5.x or newer
 
@@ -12,34 +12,36 @@
 
 ---
 
-## Quick Start: Find Your Meter's OBIS Codes
+## Quick Start: Find Your Meter's OBIS Codes via Logs
 
-This guide will get you running in minutes and show you how to discover all the data your specific meter provides.
+This guide will get you running in minutes and show you the most stable way to discover all the data your specific meter provides by reading the device logs directly in Home Assistant.
 
-### Step 1: Installation
+### Step 1: Add the Component to your Configuration
 
-1.  **Copy Component Files:** Create a `custom_components/dsmr_custom/` directory in your ESPHome config folder and copy all the files from this repository into it.
-2.  **Add to YAML:** Add the following to your device's `.yaml` file:
-    ```yaml
-    external_components:
-      - source:
-          type: local
-          path: custom_components/
-        components: [ dsmr_custom ]
-    ```
+Instead of copying files manually, you can add this component directly to your device's `.yaml` file. This will make ESPHome automatically download the correct version from GitHub.
 
-### Step 2: Initial Test Configuration
+Add the following `external_components` block to your YAML:
+```yaml
+external_components:
+  - source:
+      type: git
+      url: https://github.com/nikopaulanne/dsmr-custom
+      ref: 1.0.2
+    components: [ dsmr_custom ]
+```
 
-Use this minimal configuration first. Its only purpose is to view the raw data from your meter in Home Assistant.
+### Step 2: Initial Test & Logging Configuration
+
+Use this minimal configuration first. Its only purpose is to safely view the raw data from your meter in the ESPHome logs without crashing the device.
 
 ```yaml
-# In your secrets.yaml file:
+# In your secrets.yaml file, you should have:
 # wifi_ssid: "YourNetwork"
 # wifi_password: "YourPassword"
 # esphome_api_encryption_key: "GENERATE_A_KEY_HERE"
 
 esphome:
-  name: dsmr-reader
+  name: dsmr-diagnostics
 
 esp8266:
   board: d1_mini # Change to match your board
@@ -53,7 +55,10 @@ api:
     key: !secret esphome_api_encryption_key
 
 ota:
+
+# The logger is essential for viewing the telegram data
 logger:
+  level: INFO # INFO level is sufficient for this purpose
 
 uart:
   id: uart_bus
@@ -63,8 +68,9 @@ uart:
 
 external_components:
   - source:
-      type: local
-      path: custom_components/
+      type: git
+      url: https://github.com/nikopaulanne/dsmr-custom
+      ref: 1.0.2
     components: [ dsmr_custom ]
 
 # --- DSMR Hub ---
@@ -72,45 +78,54 @@ dsmr_custom:
   id: dsmr_hub
   uart_id: uart_bus
 
-# --- Text Sensors for Troubleshooting ---
+# --- Sensors for Logging & Diagnostics Only ---
 text_sensor:
   - platform: dsmr_custom
     dsmr_custom_hub_id: dsmr_hub
     
-    # 1. Identify your meter: This sensor shows the first line of the P1 telegram.
+    # This sensor helps confirm a connection to the meter
     identification:
       name: "P1 Telegram Header"
       
-    # 2. See all data: This sensor shows the ENTIRE raw P1 telegram.
+    # This captures the full telegram but does NOT send it to a Home Assistant state.
+    # Instead, a lightweight on_value trigger prints the data to the logs.
     telegram:
-      name: "DSMR Full Telegram"
-      internal: false # IMPORTANT: This makes the sensor visible in Home Assistant
+      internal: true # This prevents the state from being sent to Home Assistant
+      on_value:
+        - logger.log:
+            level: INFO
+            tag: "telegram_dump" # Makes the message easy to find in logs
+            format: "--- FULL TELEGRAM RECEIVED ---\n%s\n-----------------------------"
+            args: [x.c_str()]
 ```
 
-### Step 3: View Data and Collect OBIS Codes
+### Step 3: View Logs and Collect OBIS Codes
 
-1.  Upload the minimal configuration above to your device.
-2.  In Home Assistant, find the two new sensors: **"P1 Telegram Header"** and **"DSMR Full Telegram"**.
-3.  The "P1 Telegram Header" confirms your meter model.
-4.  Open the state or history of the **"DSMR Full Telegram"** sensor. You will see the entire P1 telegram as raw text.
-5.  Copy this text and inspect it. You can now see a list of all the OBIS codes your meter is sending.
+1.  Install the minimal configuration above to your device.
+2.  In Home Assistant, navigate to **Settings > Add-ons > ESPHome**.
+3.  Select your device (`dsmr-diagnostics`) from the dashboard and click the **LOGS** button.
+4.  Wait for the device to connect and receive a data packet from your meter.
+5.  You will see a clearly marked block of text appear in the logs, starting with `--- FULL TELEGRAM RECEIVED ---`. This is the complete, raw data packet from your meter.
+6.  **Copy this entire block of text** (from the start line to the end line) to your clipboard. You now have a complete list of all OBIS codes your meter provides.
 
-### Step 4: Configure Your Sensors
+### Step 4: Configure Your Final Sensors
 
-Now that you know your OBIS codes, expand your YAML to include the `custom_obis_sensors` list. Use the codes you found to create sensors. See the `slimmelezer-example.yaml` file for a detailed example.
+Now that you have your list of OBIS codes, you can create your final, permanent configuration. Modify your YAML file, remove the diagnostic `on_value` trigger, and add the sensors you want using the `custom_obis_sensors` list.
+
+See the `slimmelezer-example.yaml` file for a detailed example.
 
 ```yaml
 dsmr_custom:
   id: dsmr_hub
   uart_id: uart_bus
+  # ... other hub settings ...
   
   custom_obis_sensors:
-    - code: "1-0:1.8.0" # OBIS code from your telegram
+    # Add sensors here using the codes you found in the logs
+    - code: "1-0:1.8.0" 
       name: "Total Energy Import"
       type: sensor
-      unit_of_measurement: "kWh"
-      device_class: energy
-      state_class: total_increasing
+      # ...
 ```
 
 ---
@@ -126,7 +141,7 @@ dsmr_custom:
     * **Configurable M-Bus Channel IDs:** Allows M-Bus channel IDs for gas/water meters to be configured via YAML.
 * **Standard DSMR Sensor Support:** Option to define common sensors (energy, power, etc.) via standard `sensor:` and `text_sensor:` platforms.
 * **Sensor Override Mechanism:** A custom OBIS sensor will always take precedence over a standard sensor if they target the same OBIS code, preventing duplicate entities.
-* **Encrypted Telegram Support:** Decrypts AES-128 GCM encrypted P1 telegrams (e.g., for Luxembourg meters).
+* **Encrypted Telegram Support (Experimental):** Decrypts AES-128 GCM encrypted P1 telegrams (e.g., for Luxembourg meters). **Note: This feature is considered experimental and has not been tested on physical hardware.**
 * **`request_pin` Support:** Allows active data requests by controlling the P1 port's Data Request (RTS) pin.
 
 ### Detailed Configuration
@@ -142,7 +157,7 @@ dsmr_custom:
   max_telegram_length: 1700 # Optional, default: 1500. Max bytes for a telegram.
   receive_timeout: "600ms"  # Optional, default: "200ms". Timeout for receiving data.
   crc_check: true           # Optional, default: true. Perform CRC check on telegrams.
-  decryption_key: "YOUR_32_CHAR_HEX_DECRYPTION_KEY" # Optional. For encrypted telegrams.
+  decryption_key: "YOUR_32_CHAR_HEX_DECRYPTION_KEY" # Optional. For encrypted telegrams. (Experimental, not tested on real hardware)
   request_pin: D5           # Optional. GPIO pin for Data Request (RTS). E.g., D5.
   request_interval: "10s"   # Optional, default: "0s". Interval for active data requests.
   gas_mbus_id: 1            # Optional, default: 1. M-Bus channel ID for standard gas meter.
@@ -189,4 +204,3 @@ This component demonstrates features that could benefit the native ESPHome DSMR 
 This component is licensed under the **GNU General Public License v3.0**. A copy of the license is included in the `LICENSE` file in this repository.
 
 This project incorporates and modifies code from the `glmnet/Dsmr` library (which is based on `matthijskooijman/arduino-dsmr`). That original work is licensed under the MIT License. In compliance with the licensing terms, the original copyright notices and permissions are preserved in the headers of the respective source files (`parser.h`, `fields.h`, `util.h`, etc.).
-```
