@@ -26,7 +26,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: 1.0.2
+      ref: v1.0.2
     components: [ dsmr_custom ]
 ```
 
@@ -204,3 +204,4 @@ This component demonstrates features that could benefit the native ESPHome DSMR 
 This component is licensed under the **GNU General Public License v3.0**. A copy of the license is included in the `LICENSE` file in this repository.
 
 This project incorporates and modifies code from the `glmnet/Dsmr` library (which is based on `matthijskooijman/arduino-dsmr`). That original work is licensed under the MIT License. In compliance with the licensing terms, the original copyright notices and permissions are preserved in the headers of the respective source files (`parser.h`, `fields.h`, `util.h`, etc.).
+
