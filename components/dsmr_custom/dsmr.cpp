@@ -38,8 +38,14 @@
 #include "esphome/core/helpers.h" // For YESNO, etc.
 
 // Cryptography libraries for AES-GCM decryption
-#include <AES.h>
-#include <GCM.h>
+#ifdef USE_ARDUINO
+  #include <AES.h>
+  #include <GCM.h>
+#else
+  // ESP-IDF uses mbedtls for cryptography
+  #include "mbedtls/gcm.h"
+  #include "mbedtls/aes.h"
+#endif
 
 #include <string>
 #include <algorithm> // For std::remove_if, std::min
@@ -398,12 +404,10 @@ void Dsmr::receive_encrypted_telegram_() {
                  ciphertext_offset + ciphertext_len + gcm_tag_length, this->crypt_bytes_read_);
         this->reset_telegram_(); this->stop_requesting_data_(); return;
     }
-    GCM<AES128> gcmaes128;
-    gcmaes128.setKey(this->decryption_key_.data(), gcmaes128.keySize());
+    // Prepare IV and pointers
     uint8_t iv[12];
     memcpy(iv, &this->crypt_telegram_[2], 8);
     memcpy(iv + 8, &this->crypt_telegram_[14], 4);
-    gcmaes128.setIV(iv, sizeof(iv));
     ESP_LOGV(TAG, "Decryption IV (Hex): %02X%02X%02X%02X%02X%02X%02X%02X %02X%02X%02X%02X",
              iv[0], iv[1], iv[2], iv[3], iv[4], iv[5], iv[6], iv[7], iv[8], iv[9], iv[10], iv[11]);
     uint8_t* ciphertext_ptr = &this->crypt_telegram_[ciphertext_offset];
@@ -412,11 +416,37 @@ void Dsmr::receive_encrypted_telegram_() {
         ESP_LOGE(TAG, "Decrypted data length (%zu) would exceed plain telegram_ buffer (%zu).", ciphertext_len, this->max_telegram_len_);
         this->reset_telegram_(); this->stop_requesting_data_(); return;
     }
+
+#ifdef USE_ARDUINO
+    // Arduino: Use Crypto library
+    GCM<AES128> gcmaes128;
+    gcmaes128.setKey(this->decryption_key_.data(), gcmaes128.keySize());
+    gcmaes128.setIV(iv, sizeof(iv));
     gcmaes128.decrypt(reinterpret_cast<uint8_t *>(this->telegram_), ciphertext_ptr, ciphertext_len);
     if (!gcmaes128.checkTag(tag_ptr, gcm_tag_length)) {
         ESP_LOGW(TAG, "Decryption failed! GCM tag mismatch.");
         this->reset_telegram_(); this->stop_requesting_data_(); return;
     }
+#else
+    // ESP-IDF: Use mbedtls
+    mbedtls_gcm_context gcm_ctx;
+    mbedtls_gcm_init(&gcm_ctx);
+    int ret = mbedtls_gcm_setkey(&gcm_ctx, MBEDTLS_CIPHER_ID_AES, this->decryption_key_.data(), 128);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "mbedtls_gcm_setkey failed: -0x%04X", -ret);
+        mbedtls_gcm_free(&gcm_ctx);
+        this->reset_telegram_(); this->stop_requesting_data_(); return;
+    }
+    ret = mbedtls_gcm_auth_decrypt(&gcm_ctx, ciphertext_len, iv, sizeof(iv),
+                                     nullptr, 0,  // No additional authenticated data
+                                     tag_ptr, gcm_tag_length,
+                                     ciphertext_ptr, reinterpret_cast<uint8_t *>(this->telegram_));
+    mbedtls_gcm_free(&gcm_ctx);
+    if (ret != 0) {
+        ESP_LOGW(TAG, "Decryption failed! mbedtls_gcm_auth_decrypt returned: -0x%04X", -ret);
+        this->reset_telegram_(); this->stop_requesting_data_(); return;
+    }
+#endif
     this->telegram_[ciphertext_len] = '\0';
     this->bytes_read_ = ciphertext_len;
     ESP_LOGD(TAG, "Decryption successful. Decrypted P1 telegram size: %zu bytes.", this->bytes_read_);
