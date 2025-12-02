@@ -55,7 +55,8 @@
 #define DSMR_CUSTOM_UTIL_H
 // END MODIFICATION FOR ESPHOME DSMR_CUSTOM
 
-#if defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32)
+// ESP-IDF and modern Arduino platforms don't use PROGMEM for ESP chips
+#if defined(USE_ESP_IDF) || defined(ARDUINO_ARCH_ESP8266) || defined(ARDUINO_ARCH_ESP32)
 #define DSMR_PROGMEM
 #else
 #define DSMR_PROGMEM PROGMEM
