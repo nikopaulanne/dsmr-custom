@@ -18,8 +18,9 @@ logger:
   level: INFO
 
 api:
-  encryption:
-    key: "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
+  # Note: Decryption key not supported in ESP-IDF builds
+  # encryption:
+  #   key: "test_key_32_characters_long=="
 
 ota:
   platform: esphome

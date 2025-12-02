@@ -6,45 +6,60 @@
 
 ## Framework Support
 
-This component supports both Arduino and ESP-IDF frameworks:
+This component supports both Arduino and ESP-IDF frameworks with different feature sets:
 
-- **Arduino Framework**: ESP8266, ESP32, ESP32-S2, ESP32-S3, ESP32-C3
-- **ESP-IDF Framework**: ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C6, ESP32-H2
+### Supported Frameworks
 
-### Framework Configuration Examples
+- ✅ **Arduino Framework**: ESP8266, ESP32, ESP32-S2/S3/C3
+  - **Full support** including encrypted telegram decryption
+  - Tested and stable
+- ⚠️ **ESP-IDF Framework**: ESP32, ESP32-C6, ESP32-H2
+  - Supports **unencrypted telegrams only**
+  - Encrypted telegram decryption **NOT supported** (mbedtls linkage limitation)
+  - Use for newer chips (C6/H2) or when ESP-IDF is required
 
-**For ESP-IDF on newer chips (C6, H2):**
+### Which Framework Should I Use?
+
+| **Your Situation** | **Recommended Framework** |
+|-------------------|--------------------------|
+| My meter sends **encrypted** telegrams | ✅ Arduino |
+| My meter sends **unencrypted** telegrams | ✅ Arduino or ESP-IDF |
+| I have ESP32-C6 or ESP32-H2 | ⚠️ ESP-IDF (unencrypted only) |
+| I have ESP8266 or classic ESP32 | ✅ Arduino (fully tested) |
+
+> **Note:** Most Dutch smart meters send unencrypted telegrams. Check your meter's specifications if unsure.
+
+### Configuration Examples
+
+**Arduino (ESP8266 - Recommended)**
+```yaml
+esp8266:
+  board: d1_mini
+
+dsmr_custom:
+  decryption_key: "AABBCCDDEEFF00112233445566778899"  # ✅ Supported
+```
+
+**ESP-IDF (ESP32-C6 - Unencrypted Only)**
 ```yaml
 esp32:
   board: esp32-c6-devkitc-1
   framework:
     type: esp-idf
 
-external_components:
-  - source:
-      type: git
-      url: https://github.com/nikopaulanne/dsmr-custom
-      ref: v1.1.0
-    components: [ dsmr_custom ]
-
-# Rest of your configuration...
+dsmr_custom:
+  # ⚠️ Do NOT set decryption_key - not supported
+  # Encrypted telegrams will be skipped with warning in logs
 ```
 
-**For Arduino Framework (traditional):**
-```yaml
-esp8266:
-  board: d1_mini
-  framework:
-    version: 3.1.2
+### ESP-IDF Limitations
 
-# Rest of your configuration...
-```
+**Encrypted telegram decryption is NOT supported in ESP-IDF builds.**
 
-### Known Limitations
-
-- Both frameworks are supported but tested primarily on Arduino
-- Community testing on ESP-IDF platforms is ongoing
-- Report issues specific to ESP-IDF on GitHub
+- **Why?** mbedtls library linkage limitations in ESPHome's ESP-IDF build system
+- **Impact:** Encrypted telegrams are skipped with clear warning messages in logs
+- **Workaround:** Use Arduino framework for encrypted telegrams
+- **Tracking:** [See detailed explanation](docs/esp-idf-limitations.md)
 
 **Author:** Niko Paulanne
 

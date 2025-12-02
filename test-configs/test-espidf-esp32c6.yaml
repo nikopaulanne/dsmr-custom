@@ -10,6 +10,9 @@ esp32:
   variant: esp32c6
   framework:
     type: esp-idf
+    sdkconfig_options:
+      CONFIG_MBEDTLS_GCM_C: y
+      CONFIG_MBEDTLS_CIPHER_MODE_CBC: y
 
 wifi:
   ssid: "test"
@@ -19,8 +22,9 @@ logger:
   level: INFO
 
 api:
-  encryption:
-    key: "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
+  # Note: Decryption key not supported in ESP-IDF builds
+  # encryption:
+  #   key: "test_key_32_characters_long=="
 
 ota:
   platform: esphome

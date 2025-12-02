@@ -1,0 +1,4 @@
+# Enable mbedtls GCM mode for AES-GCM decryption
+CONFIG_MBEDTLS_GCM_C=y
+CONFIG_MBEDTLS_CIPHER_MODE_CBC=y
+CONFIG_MBEDTLS_AES_C=y
