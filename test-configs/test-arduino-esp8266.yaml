@@ -1,0 +1,54 @@
+substitutions:
+  device_name: test-arduino-esp8266
+
+esphome:
+  name: ${device_name}
+  name_add_mac_suffix: false
+
+esp8266:
+  board: d1_mini
+  framework:
+    version: 3.1.2
+
+wifi:
+  ssid: "test"
+  password: "test12345678"
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: "test_key_32_characters_long=="
+
+ota:
+  platform: esphome
+
+uart:
+  id: uart_bus
+  baud_rate: 115200
+  rx_pin: D7
+  rx_buffer_size: 1700
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [ dsmr_custom ]
+    refresh: 0s
+
+dsmr_custom:
+  id: dsmr_hub
+  uart_id: uart_bus
+  max_telegram_length: 1700
+  crc_check: true
+
+text_sensor:
+  - platform: dsmr_custom
+    dsmr_custom_hub_id: dsmr_hub
+    identification:
+      name: "P1 Telegram Header"
+
+sensor:
+  - platform: uptime
+    name: "Uptime"

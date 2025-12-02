@@ -1,0 +1,9 @@
+# Yksityiset kansiot (eivät mene Gitiin)
+private/
+research/
+
+# Väliaikaiset tiedostot ja käyttöjärjestelmän roskat
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log

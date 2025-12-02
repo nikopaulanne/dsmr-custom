@@ -29,6 +29,10 @@ from esphome.components import uart
 from esphome.components import sensor as esphome_global_sensor
 from esphome.components import text_sensor as esphome_global_text_sensor
 
+DEPENDENCIES = ["uart"]
+AUTO_LOAD = ["sensor", "text_sensor"]
+CODEOWNERS = ["@nikopaulanne"]
+
 from esphome.const import (
     CONF_ID,
     CONF_UART_ID,

@@ -1,0 +1,52 @@
+name: Compile Test
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test-config:
+          - test-arduino-esp8266.yaml
+          - test-espidf-esp32.yaml
+          - test-espidf-esp32c6.yaml
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install ESPHome
+        run: |
+          pip install esphome
+      
+      - name: Compile ${{ matrix.test-config }}
+        run: |
+          esphome compile test-configs/${{ matrix.test-config }}
+      
+      - name: Upload binary artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.test-config }}
+          path: |
+            .esphome/build/**/firmware.bin
+            .esphome/build/**/firmware.elf
+          retention-days: 7

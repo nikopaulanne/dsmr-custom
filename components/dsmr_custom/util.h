@@ -61,9 +61,29 @@
 #define DSMR_PROGMEM PROGMEM
 #endif
 
-#include <Arduino.h>
-#include <stdint.h>
-#include <string.h>
+// Framework-agnostic includes
+#ifdef USE_ARDUINO
+  #include <Arduino.h>
+  #include <stdint.h>
+  #include <string.h>
+  #include <utility>
+#else
+  // ESP-IDF native includes
+  #include <stdint.h>
+  #include <string>
+  #include <utility>
+  #include "esphome/core/helpers.h"
+  
+  // Arduino String compatibility layer for ESP-IDF
+  namespace dsmr {
+    using String = std::string;
+    
+    // Flash string helper compatibility
+    #define __FlashStringHelper char
+    #define F(string_literal) (string_literal)
+  }
+#endif
+
 #include <utility> // For std::move
 
 namespace dsmr {
@@ -73,10 +93,16 @@ inline unsigned int lengthof(const T (&/*arr*/)[sz]) { return sz; }
 
 static void concat_hack(String& s, const char *append, size_t n) {
   if (n == 0) return;
-  char buf[n + 1];
-  memcpy(buf, append, n);
-  buf[n] = '\0';
-  s.concat(buf);
+  
+  #ifdef USE_ARDUINO
+    char buf[n + 1];
+    memcpy(buf, append, n);
+    buf[n] = '\0';
+    s.concat(buf);
+  #else
+    // ESP-IDF std::string uses append
+    s.append(append, n);
+  #endif
 }
 
 template <typename T> struct ParseResult;
@@ -124,6 +150,7 @@ struct ParseResult : public _ParseResult<ParseResult<T>, T> {
 
   String fullError(const char* start, const char* input_end) const {
     String error_string;
+    
     if (this->ctx_ && start && input_end && this->ctx_ >= start && this->ctx_ < input_end) {
       const char *line_end_ptr = this->ctx_;
       while (line_end_ptr < input_end && *line_end_ptr != '\r' && *line_end_ptr != '\n') {
@@ -133,17 +160,40 @@ struct ParseResult : public _ParseResult<ParseResult<T>, T> {
       while (line_start_ptr > start && *(line_start_ptr - 1) != '\r' && *(line_start_ptr - 1) != '\n') {
         --line_start_ptr;
       }
+      
       concat_hack(error_string, line_start_ptr, line_end_ptr - line_start_ptr);
-      error_string += "\r\n";
+      
+      #ifdef USE_ARDUINO
+        error_string += "\r\n";
+      #else
+        error_string.append("\r\n");
+      #endif
+      
       for (const char *p = line_start_ptr; p < this->ctx_; ++p) {
-        error_string += ' ';
+        #ifdef USE_ARDUINO
+          error_string += ' ';
+        #else
+          error_string.push_back(' ');
+        #endif
       }
-      error_string += '^';
-      error_string += "\r\n";
+      
+      #ifdef USE_ARDUINO
+        error_string += '^';
+        error_string += "\r\n";
+      #else
+        error_string.push_back('^');
+        error_string.append("\r\n");
+      #endif
     }
+    
     if (this->err_) {
-      error_string += this->err_;
+      #ifdef USE_ARDUINO
+        error_string += this->err_;
+      #else
+        error_string.append(this->err_);
+      #endif
     }
+    
     return error_string;
   }
 };

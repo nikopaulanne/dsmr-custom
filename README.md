@@ -4,6 +4,48 @@
 
 **ESPHome Compatibility:** 2025.5.x or newer
 
+## Framework Support
+
+This component supports both Arduino and ESP-IDF frameworks:
+
+- **Arduino Framework**: ESP8266, ESP32, ESP32-S2, ESP32-S3, ESP32-C3
+- **ESP-IDF Framework**: ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C6, ESP32-H2
+
+### Framework Configuration Examples
+
+**For ESP-IDF on newer chips (C6, H2):**
+```yaml
+esp32:
+  board: esp32-c6-devkitc-1
+  framework:
+    type: esp-idf
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/nikopaulanne/dsmr-custom
+      ref: v1.1.0
+    components: [ dsmr_custom ]
+
+# Rest of your configuration...
+```
+
+**For Arduino Framework (traditional):**
+```yaml
+esp8266:
+  board: d1_mini
+  framework:
+    version: 3.1.2
+
+# Rest of your configuration...
+```
+
+### Known Limitations
+
+- Both frameworks are supported but tested primarily on Arduino
+- Community testing on ESP-IDF platforms is ongoing
+- Report issues specific to ESP-IDF on GitHub
+
 **Author:** Niko Paulanne
 
 **Parser Base:** `glmnet/Dsmr` (v0.8), vendored and modified. Original by Matthijs Kooijman.

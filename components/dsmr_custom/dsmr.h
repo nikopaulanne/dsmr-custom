@@ -36,7 +36,7 @@
     #ifndef DSMR_CUSTOM_HUB_DSMR_H // Unique include guard for your hub component
     #define DSMR_CUSTOM_HUB_DSMR_H
 
-    #ifdef USE_ARDUINO // Guard to ensure code is compiled only for Arduino-based platforms.
+    #if defined(USE_ARDUINO) || defined(USE_ESP_IDF) // Guard to ensure code is compiled for supported platforms.
 
     #include "esphome/core/component.h"
     #include "esphome/components/sensor/sensor.h"

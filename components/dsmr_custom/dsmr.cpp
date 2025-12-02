@@ -31,7 +31,7 @@
  * @date June 7, 2025
  */
 
-#ifdef USE_ARDUINO // Guard for Arduino-based platforms
+#if defined(USE_ARDUINO) || defined(USE_ESP_IDF) // Guard for supported platforms
 
 #include "dsmr.h" // Header for this component's Dsmr class
 #include "esphome/core/log.h"
