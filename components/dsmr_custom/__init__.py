@@ -131,13 +131,16 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID], uart_var, config[CONF_CRC_CHECK])
     await cg.register_component(var, config)
 
-    # Arduino builds need the Crypto library, ESP-IDF has built-in mbedtls
+    # Platform-specific crypto library configuration
     from esphome.core import CORE
     if not CORE.using_esp_idf:
+        # Arduino: Use rweather/Crypto library
         cg.add_library("rweather/Crypto", "0.4.0")
     else:
-        # ESP-IDF: noise-c library properly links mbedtls
-        cg.add_library("esphome/noise-c", "0.1.10")
+        # ESP-IDF: Use vendored MbedTLS subset
+        # Add include path for the bundled crypto headers
+        bundled_include_dir = (COMPONENT_DIRECTORY / "crypto_bundled" / "include").resolve().as_posix()
+        cg.add_build_flag(f"-I{bundled_include_dir}")
 
     pio_options = config.get(CONF_PLATFORMIO_OPTIONS, {})
     lib_deps_yaml = pio_options.get("lib_deps", [])

@@ -40,10 +40,13 @@
 #include "esphome/core/helpers.h" // For YESNO, etc.
 #include "esphome/core/log.h"
 
-// Cryptography libraries for AES-GCM decryption (Arduino only)
+// Cryptography libraries for AES-GCM decryption
 #ifdef USE_ARDUINO
 #include <AES.h>
 #include <GCM.h>
+#else
+// ESP-IDF: Use vendored MbedTLS wrapper
+#include "dsmr_crypto.h"
 #endif
 
 #include <algorithm> // For std::remove_if, std::min
@@ -513,6 +516,7 @@ void Dsmr::receive_encrypted_telegram_() {
     gcmaes128.setIV(iv, sizeof(iv));
     gcmaes128.decrypt(reinterpret_cast<uint8_t *>(this->telegram_),
                       ciphertext_ptr, ciphertext_len);
+
     if (!gcmaes128.checkTag(tag_ptr, gcm_tag_length)) {
       ESP_LOGW(TAG, "Decryption failed! GCM tag mismatch.");
       this->reset_telegram_();
@@ -520,19 +524,21 @@ void Dsmr::receive_encrypted_telegram_() {
       return;
     }
 #else
-    // ESP-IDF: Decryption NOT supported due to mbedtls linkage limitations
-    ESP_LOGW(TAG, "Encrypted telegram received but decryption is not supported "
-                  "in ESP-IDF builds.");
-    ESP_LOGW(
-        TAG,
-        "Please use unencrypted telegrams or switch to Arduino framework.");
-    ESP_LOGW(TAG, "See: "
-                  "https://github.com/nikopaulanne/dsmr-custom/blob/main/docs/"
-                  "esp-idf-limitations.md");
-    this->reset_telegram_();
-    this->stop_requesting_data_();
-    return;
+    // ESP-IDF: Use vendored MbedTLS wrapper
+    int decrypt_result = dsmr_aes_gcm_decrypt(
+        this->decryption_key_.data(), this->decryption_key_.size(), iv,
+        sizeof(iv), ciphertext_ptr, ciphertext_len, tag_ptr, gcm_tag_length,
+        reinterpret_cast<unsigned char *>(this->telegram_));
+
+    if (decrypt_result != 0) {
+      ESP_LOGW(TAG, "Decryption failed! Error code: %d", decrypt_result);
+      this->reset_telegram_();
+      this->stop_requesting_data_();
+      return;
+    }
+    ESP_LOGD(TAG, "ESP-IDF: Decryption successful using vendored MbedTLS.");
 #endif
+
     this->telegram_[ciphertext_len] = '\0';
     this->bytes_read_ = ciphertext_len;
     ESP_LOGD(TAG,
@@ -632,8 +638,8 @@ void Dsmr::process_line_for_custom_sensors(const char *line_buffer,
             this->parse_numeric_value_from_string(value_part_str);
         if (val_opt.has_value()) {
           float current_value = val_opt.value();
-          // Accessing static constexpr members via class name or this-> (if not
-          // shadowed)
+          // Accessing static constexpr members via class name or this-> (if
+          // not shadowed)
           bool value_changed_significantly =
               std::isnan(custom_def.last_published_float_value) ||
               (std::fabs(current_value -
@@ -704,8 +710,8 @@ bool Dsmr::parse_telegram() {
       false /* unknown_error */, this->crc_check_);
 
   if (standard_parse_result
-          .err_) { // CORRECTED: Access err_ (from ver4_parser_lib_parser.h via
-                   // ver3_parser_lib_util.h)
+          .err_) { // CORRECTED: Access err_ (from ver4_parser_lib_parser.h
+                   // via ver3_parser_lib_util.h)
     auto err_str = standard_parse_result.fullError(
         this->telegram_, this->telegram_ + this->bytes_read_);
     ESP_LOGW(TAG, "DSMR P1 vendored parser error: %s", err_str.c_str());
@@ -1031,4 +1037,4 @@ void Dsmr::add_custom_text_sensor(const std::string &obis_code,
 } // namespace dsmr_custom
 } // namespace esphome
 
-#endif // USE_ARDUINO
+#endif // defined(USE_ARDUINO) || defined(USE_ESP_IDF)
