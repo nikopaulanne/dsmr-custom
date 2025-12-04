@@ -62,3 +62,49 @@ To make this work within ESPHome/PlatformIO:
 ## Future Considerations
 
 If ESPHome improves support for native ESP-IDF component dependencies in the future (e.g., properly handling `idf_component_register`), the `post_build.py` script might become unnecessary. For now, it provides a robust solution.
+
+---
+
+## Quick Start for Developers
+
+If you're implementing similar ESP-IDF crypto functionality in an ESPHome custom component:
+
+1. **Use System Libraries:** Don't vendor crypto code. Use ESP-IDF's built-in libraries.
+2. **Create `post_build.py`:** Register it via `cg.add_platformio_option("extra_scripts", ...)` in `__init__.py`.
+3. **Use `AddPreAction`:** Hook into firmware linking, not global environment:
+   ```python
+   env.AddPreAction("$BUILD_DIR/${PROGNAME}.elf", your_linker_function)
+   ```
+4. **Check Symbol Names:** Use `nm` tool to verify actual symbols in `.a` files:
+   ```bash
+   riscv32-esp-elf-nm libmbedcrypto.a | grep your_function
+   ```
+5. **Hardware API:** ESP-IDF often wraps standard APIs (e.g., `esp_aes_gcm_*` instead of `mbedtls_gcm_*`).
+
+## Troubleshooting
+
+### "undefined reference to mbedtls_*"
+- **Cause:** Libraries not linked.
+- **Fix:** Check that `post_build.py` is registered and runs. Add debug logging to verify execution.
+
+### "Bootloader build fails with mbedtls errors"
+- **Cause:** Libraries added globally instead of only for firmware.
+- **Fix:** Use `AddPreAction` hook, not `env.Append` at module level.
+
+### "cannot find -lmbedcrypto"
+- **Cause:** Wrong library path or library in different directory.
+- **Fix:** MbedTLS libraries are split across directories in ESP-IDF. Check both:
+  - `esp-idf/mbedtls/` (libmbedtls.a)
+  - `esp-idf/mbedtls/mbedtls/library/` (libmbedcrypto.a, libmbedx509.a)
+
+### "Header contamination / type conflicts"
+- **Cause:** Trying to vendor MbedTLS while system version exists.
+- **Fix:** Don't vendor - use system library with proper linking.
+
+## Key Files Reference
+
+- [`post_build.py`](../components/dsmr_custom/post_build.py) - SCons linker script
+- [`dsmr_crypto_impl.cpp`](../components/dsmr_custom/dsmr_crypto_impl.cpp) - ESP-IDF crypto implementation
+- [`__init__.py`](../components/dsmr_custom/__init__.py) - Component registration
+- [`sdkconfig.defaults`](../components/dsmr_custom/sdkconfig.defaults) - ESP-IDF config
+

@@ -204,7 +204,8 @@ dsmr_custom:
   max_telegram_length: 1700 # Optional, default: 1500. Max bytes for a telegram.
   receive_timeout: "600ms"  # Optional, default: "200ms". Timeout for receiving data.
   crc_check: true           # Optional, default: true. Perform CRC check on telegrams.
-  decryption_key: "YOUR_32_CHAR_HEX_DECRYPTION_KEY" # Optional. For encrypted telegrams. (Experimental, not tested on real hardware)
+  decryption_key: "YOUR_32_CHAR_HEX_DECRYPTION_KEY" # Optional. For encrypted telegrams.
+  # Note: See docs/aes-gcm-implementation-notes.md for technical details on ESP-IDF encryption support
   request_pin: D5           # Optional. GPIO pin for Data Request (RTS). E.g., D5.
   request_interval: "10s"   # Optional, default: "0s". Interval for active data requests.
   gas_mbus_id: 1            # Optional, default: 1. M-Bus channel ID for standard gas meter.
