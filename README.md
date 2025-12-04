@@ -13,18 +13,18 @@ This component supports both Arduino and ESP-IDF frameworks with different featu
 - ✅ **Arduino Framework**: ESP8266, ESP32, ESP32-S2/S3/C3
   - **Full support** including encrypted telegram decryption
   - Tested and stable
-- ⚠️ **ESP-IDF Framework**: ESP32, ESP32-C6, ESP32-H2
-  - Supports **unencrypted telegrams only**
-  - Encrypted telegram decryption **NOT supported** (mbedtls linkage limitation)
-  - Use for newer chips (C6/H2) or when ESP-IDF is required
+- ✅ **ESP-IDF Framework**: ESP32, ESP32-C6, ESP32-H2
+  - **Full support** including encrypted telegram decryption
+  - Uses hardware acceleration on supported chips (e.g. ESP32-C6)
+  - *Note: Encryption support is currently experimental and needs field testing*
 
 ### Which Framework Should I Use?
 
 | **Your Situation** | **Recommended Framework** |
 |-------------------|--------------------------|
-| My meter sends **encrypted** telegrams | ✅ Arduino |
+| My meter sends **encrypted** telegrams | ✅ Arduino (Stable) or ESP-IDF (Experimental) |
 | My meter sends **unencrypted** telegrams | ✅ Arduino or ESP-IDF |
-| I have ESP32-C6 or ESP32-H2 | ⚠️ ESP-IDF (unencrypted only) |
+| I have ESP32-C6 or ESP32-H2 | ✅ ESP-IDF |
 | I have ESP8266 or classic ESP32 | ✅ Arduino (fully tested) |
 
 > **Note:** Most Dutch smart meters send unencrypted telegrams. Check your meter's specifications if unsure.
@@ -40,7 +40,7 @@ dsmr_custom:
   decryption_key: "AABBCCDDEEFF00112233445566778899"  # ✅ Supported
 ```
 
-**ESP-IDF (ESP32-C6 - Unencrypted Only)**
+**ESP-IDF (ESP32-C6)**
 ```yaml
 esp32:
   board: esp32-c6-devkitc-1
@@ -48,18 +48,8 @@ esp32:
     type: esp-idf
 
 dsmr_custom:
-  # ⚠️ Do NOT set decryption_key - not supported
-  # Encrypted telegrams will be skipped with warning in logs
+  decryption_key: "AABBCCDDEEFF00112233445566778899"  # ✅ Supported (Experimental)
 ```
-
-### ESP-IDF Limitations
-
-**Encrypted telegram decryption is NOT supported in ESP-IDF builds.**
-
-- **Why?** mbedtls library linkage limitations in ESPHome's ESP-IDF build system
-- **Impact:** Encrypted telegrams are skipped with clear warning messages in logs
-- **Workaround:** Use Arduino framework for encrypted telegrams
-- **Tracking:** [See detailed explanation](docs/esp-idf-limitations.md)
 
 **Author:** Niko Paulanne
 

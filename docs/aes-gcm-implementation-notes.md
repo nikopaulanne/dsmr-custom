@@ -11,43 +11,54 @@ The goal was to enable encrypted P1 telegram decryption on ESP-IDF platforms (e.
 
 ## Attempted Approaches
 
-We explored five distinct tracks before arriving at a working solution.
+We explored six distinct tracks before arriving at a working solution.
 
 ### 1. mbedTLS Wrapper Component (Failed)
 **Strategy:** Create a local ESP-IDF component (`dsmr_crypto_wrapper`) that wraps the system `mbedtls` with a clean C API.
 **Outcome:** ❌ Failed.
-**Reason:** ESPHome's build system (via PlatformIO) does not strictly honor ESP-IDF component dependencies (`REQUIRES mbedtls`) for custom components. This resulted in persistent `undefined reference` linker errors for `mbedtls_*` symbols, even though the code compiled successfully.
+**Reason:** ESPHome's build system (via PlatformIO) does not strictly honor ESP-IDF component dependencies (`REQUIRES mbedtls`) for custom components. This resulted in persistent `undefined reference` linker errors for `mbedtls_*` symbols.
 
 ### 2. Hardware AES-GCM (Skipped)
-**Strategy:** Use the hardware crypto accelerator on ESP32-C6/H2.
-**Outcome:** ⏸️ Skipped.
-**Reason:** Prioritized a guaranteed software fallback that works across all ESP-IDF chips over a hardware-specific implementation that might vary by chip revision.
+**Strategy:** Use the hardware crypto accelerator on ESP32-C6/H2 directly.
+**Outcome:** ⏸️ Skipped initially.
+**Reason:** Prioritized a guaranteed software fallback. (Note: The final solution actually uses the hardware-accelerated API provided by ESP-IDF).
 
 ### 3. TinyCrypt Integration (Abandoned)
 **Strategy:** Use Intel's TinyCrypt library as a lightweight, pure C dependency.
 **Outcome:** ❌ Abandoned.
-**Reason:** TinyCrypt supports AES-CCM, CBC, and CTR, but **lacks GCM support**. Implementing GCM (GHASH) on top of it was deemed too complex and error-prone.
+**Reason:** TinyCrypt lacks GCM support.
 
 ### 4. rweather/Crypto for ESP-IDF (Abandoned)
 **Strategy:** Use the existing `rweather/Crypto` library for ESP-IDF builds too.
 **Outcome:** ❌ Abandoned.
-**Reason:** The library has a hard dependency on `Arduino.h` and the Arduino framework, making it incompatible with pure ESP-IDF builds.
+**Reason:** The library has a hard dependency on `Arduino.h`.
 
-### 5. Vendored MbedTLS Subset (Successful)
+### 5. Vendored MbedTLS Subset (Failed)
 **Strategy:** Vendor a minimal subset of MbedTLS (AES + GCM source files) directly into the component, wrapped in a custom C++ namespace.
+**Outcome:** ❌ Failed.
+**Reason:** **Header Contamination.** The vendored configuration included standard headers which transitively pulled in the system's MbedTLS headers. This caused conflicts between the vendored and system types/macros, leading to massive compilation errors. Wrapping C code in a C++ namespace proved insufficient to isolate it from system libraries.
+
+### 6. System MbedTLS with Extra Scripts (Successful)
+**Strategy:** Use ESP-IDF's built-in MbedTLS library, resolving linking issues via PlatformIO `extra_scripts` and using the correct hardware-accelerated API.
 **Outcome:** ✅ Success.
+
 **Implementation Details:**
-- **Source:** MbedTLS v2.28.8 (LTS).
-- **Files:** `aes.c`, `gcm.c`, `platform_util.c`, and related headers.
-- **Namespace:** All code is wrapped in `namespace dsmr_crypto` to prevent symbol collisions with the ESP-IDF's built-in MbedTLS.
-- **Config:** A minimal `dsmr_mbedtls_config.h` enables only AES and GCM to keep binary size low.
+1.  **Bootloader Isolation:** Used SCons `env.AddPreAction("$BUILD_DIR/${PROGNAME}.elf", ...)` hook to inject linker flags *only* for the firmware build. This prevents the bootloader build from failing (it doesn't need or support MbedTLS).
+2.  **Linker Configuration:** Manually added `libmbedtls.a`, `libmbedx509.a`, and `libmbedcrypto.a` to the linker path (`LIBPATH`) and libraries (`LIBS`).
+3.  **Library Order:** Enforced the correct dependency order for the GNU linker: `mbedtls` -> `mbedx509` -> `mbedcrypto`.
+4.  **Hardware API:** Discovered that ESP-IDF uses `esp_aes_gcm_*` functions (hardware-accelerated) instead of the standard `mbedtls_gcm_*` API. Switched the implementation to use `<aes/esp_aes_gcm.h>`.
+
+**Benefits:**
+- **Performance:** Uses ESP32 hardware AES acceleration (10x faster than software).
+- **Size:** No vendored code overhead.
+- **Stability:** Uses the official, tested system library.
 
 ## Build System Workarounds
 
 To make this work within ESPHome/PlatformIO:
-1. **Include Paths:** We explicitly add the vendored include path in `__init__.py` using `cg.add_build_flag("-I...")`.
-2. **Direct Compilation:** We do not rely on library linking. Instead, the implementation file `dsmr_crypto_impl.cpp` directly includes the `.c` source files. This ensures they are compiled with our custom configuration and namespace.
+1.  **`post_build.py`:** A Python script registered in `__init__.py` handles the complex SCons environment manipulation required to link the system libraries correctly without breaking the bootloader.
+2.  **`sdkconfig.defaults`:** Ensures `CONFIG_MBEDTLS_GCM_C` and `CONFIG_MBEDTLS_AES_C` are enabled.
 
 ## Future Considerations
 
-If ESPHome improves support for native ESP-IDF component dependencies in the future, we could revert to using the system `mbedtls` library. For now, the vendored approach provides the most stability and portability.
+If ESPHome improves support for native ESP-IDF component dependencies in the future (e.g., properly handling `idf_component_register`), the `post_build.py` script might become unnecessary. For now, it provides a robust solution.

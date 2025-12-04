@@ -137,10 +137,10 @@ async def to_code(config):
         # Arduino: Use rweather/Crypto library
         cg.add_library("rweather/Crypto", "0.4.0")
     else:
-        # ESP-IDF: Use vendored MbedTLS subset
-        # Add include path for the bundled crypto headers
-        bundled_include_dir = (COMPONENT_DIRECTORY / "crypto_bundled" / "include").resolve().as_posix()
-        cg.add_build_flag(f"-I{bundled_include_dir}")
+        # ESP-IDF: Uses system MbedTLS - configure linker via extra_scripts
+        # We need to manually link libmbedtls.a, libmbedcrypto.a, etc.
+        # because ESPHome/PlatformIO doesn't automatically link them for custom components
+        cg.add_platformio_option("extra_scripts", ["pre:" + (COMPONENT_DIRECTORY / "post_build.py").as_posix()])
 
     pio_options = config.get(CONF_PLATFORMIO_OPTIONS, {})
     lib_deps_yaml = pio_options.get("lib_deps", [])
@@ -149,7 +149,7 @@ async def to_code(config):
 
     # Ensure the component's root directory itself is in includes
     # This helps resolve includes like #include "parser.h" if parser.h is in the same directory as dsmr.h
-    cg.add_build_flag(f"-I{str(COMPONENT_DIRECTORY)}")
+    cg.add_build_flag(f"-I{COMPONENT_DIRECTORY.resolve().as_posix()}")
 
     cg.add(var.set_max_telegram_length(config[CONF_MAX_TELEGRAM_LENGTH]))
     cg.add(var.set_receive_timeout(config[CONF_RECEIVE_TIMEOUT].total_milliseconds))

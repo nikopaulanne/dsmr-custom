@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2025-12-03
+
+### Added
+- **ESP-IDF Encryption Support:** Added experimental support for AES-GCM decryption on ESP-IDF platforms (e.g., ESP32-C6).
+  - Uses system MbedTLS library with hardware acceleration where available.
+  - Implemented via PlatformIO `extra_scripts` to handle library linking.
+
 ## [1.1.0] - 2025-12-02
 
 ### Added
