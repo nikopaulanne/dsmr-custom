@@ -1,6 +1,6 @@
 # dsmr-custom - Enhanced DSMR P1 Component for ESPHome
 
-**Version:** 1.0.2
+**Version:** 1.2.0
 
 **ESPHome Compatibility:** 2025.5.x or newer
 
@@ -73,7 +73,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: v1.0.2
+      ref: v1.2.0
     components: [ dsmr_custom ]
 ```
 
@@ -117,7 +117,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: 1.0.2
+      ref: 1.2.0
     components: [ dsmr_custom ]
 
 # --- DSMR Hub ---
