@@ -19,7 +19,7 @@
 # How to use this file:
 # 1. Copy this file to your ESPHome configuration directory.
 # 2. Rename it to something meaningful, e.g., 'my_meter_reader.yaml'.
-# 3. Create a 'secrets.yaml' file in the same directory to store your private credentials.
+# 3. Create a 'secrets.yaml' file in the same directory for credentials. Never commit it.
 # 4. Review and adjust the settings below, especially WiFi credentials and custom OBIS sensors.
 
 # --- Substitutions ---
@@ -35,7 +35,7 @@ esphome:
   name_add_mac_suffix: false # Set to true if you have multiple devices with the same name
   project:
     name: dsmr_custom.slimmelezer
-    version: "2025.6.1"
+    version: "1.2.0"
 
   # The on_boot sequence is used here to apply a stored decryption key.
   # This is an advanced feature for meters that use encrypted telegrams (e.g., in Luxembourg).
@@ -149,6 +149,8 @@ globals:
     type: bool
     restore_value: "true"
     initial_value: "false"
+  # restore_value persists this runtime key in ESPHome's device preferences.
+  # This example does not configure encryption at rest; protect physical flash access.
   - id: stored_decryption_key
     type: char[33]
     restore_value: "true"
@@ -169,7 +171,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: v1.0.1
+      ref: v1.2.0
     components: [ dsmr_custom ]
     
 

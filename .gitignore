@@ -9,3 +9,7 @@ Desktop.ini
 *.log
 __pycache__/
 *.py[cod]
+
+# Local ESPHome secrets; do not commit credentials or meter keys.
+secrets.yaml
+secrets.*.yaml

@@ -64,9 +64,13 @@ experimental until users report results from real encrypted meters.
 
 ## Key handling
 
-Store keys in ESPHome `secrets.yaml` and reference them with `!secret`. Never
-print a key in logs, include a real key in an example, or attach an unredacted
-telegram or key to a public issue.
+Store compile-time keys in ESPHome `secrets.yaml` and reference them with
+`!secret`; this keeps them out of the YAML file in Git, but does not by itself
+encrypt a key embedded in firmware. The Slimmelezer example also accepts a
+runtime key through the encrypted ESPHome API and persists it in a global with
+`restore_value: true`; ESPHome preferences are not encrypted by this example.
+Never print a key in logs, include a real key in an example, or attach an
+unredacted telegram or key to a public issue.
 
 ## Future work
 

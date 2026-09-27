@@ -51,8 +51,9 @@ the target matrix currently compiles against the ESPHome-provided ESP-IDF.
 
 ## ESPHome configuration and compile matrix
 
-Each configuration includes a synthetic decryption key so code generation and
-the encrypted receive path are built for every framework:
+Each configuration uses dummy Wi-Fi/API credentials and a synthetic decryption
+key; these values are for compile-only tests and must never be used on a real
+network. They build the encrypted receive path for every framework:
 
 | Configuration | Target |
 |---|---|
@@ -75,22 +76,29 @@ ESPHome release (2025.5.0) and the current release. CI uses Python 3.12 and runs
 weekly so new ESPHome releases are checked without waiting for a project change.
 
 An additional local check on 2026-09-27 used ESPHome 2026.9.0's native ESP-IDF
-toolchain with ESP-IDF 6.0.1 on ESP32. The firmware compiled and linked. To
-repeat this check, use a copy of `test-espidf-esp32.yaml`, set
-`esp32.toolchain: esp-idf` and `esp32.framework.version: 6.0.1`, then run:
+toolchain with ESP-IDF 6.0.1 on ESP32. The firmware compiled and linked. The
+reproducible test configuration is `test-configs/manual/test-espidf6-native.yaml`:
 
 ```bash
-"$ESPHOME" --toolchain esp-idf compile path/to/test-espidf6.yaml
+"$ESPHOME" --toolchain esp-idf compile test-configs/manual/test-espidf6-native.yaml
 ```
 
-The PlatformIO route was also checked with ESP-IDF 6.0.1. Its first clean build
-compiled the component but stopped at bootloader linking because the generated
-`bootloader.ld` script had not been preprocessed. After that first attempt has
-generated the Ninja files, run ESP-IDF's preprocessing target and retry:
+The PlatformIO route was also checked with ESP-IDF 6.0.1 using
+`test-configs/manual/test-espidf6-pio.yaml`. Its first clean build compiled the
+component but stopped at bootloader linking because the generated `bootloader.ld`
+script had not been preprocessed. Run this command once to generate the Ninja
+files; the first attempt is expected to stop at the bootloader linker-script
+error:
+
+```bash
+"$ESPHOME" --toolchain platformio compile test-configs/manual/test-espidf6-pio.yaml
+```
+
+Then preprocess the generated linker script and retry the build:
 
 ```bash
 ninja -C "$ESPHOME_DATA_DIR/build/test-espidf6-pio/.pioenvs/test-espidf6-pio/bootloader" bootloader_ld_in_preprocess
-"$ESPHOME" --toolchain platformio compile ../local-test-artifacts/test-espidf6-pio.yaml
+"$ESPHOME" --toolchain platformio compile test-configs/manual/test-espidf6-pio.yaml
 ```
 
 The retry compiled and linked the full firmware. It also ran `post_build.py`,

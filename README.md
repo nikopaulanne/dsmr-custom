@@ -62,7 +62,7 @@ This guide will get you running in minutes and show you the most stable way to d
 
 ### Step 1: Add the Component to your Configuration
 
-Instead of copying files manually, you can add this component directly to your device's `.yaml` file. The `main` branch contains the current compatibility work; once a new release is published, pin its version tag for reproducible installs.
+Instead of copying files manually, you can add this component directly to your device's `.yaml` file. The latest published release is v1.2.0; use its version tag for reproducible installs. Use `main` only when testing unreleased changes, and update the tag to v1.3.0 after that release is published.
 
 Add the following `external_components` block to your YAML:
 ```yaml
@@ -70,7 +70,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: main
+      ref: v1.2.0
     components: [ dsmr_custom ]
 ```
 
@@ -79,6 +79,7 @@ external_components:
 Use this minimal configuration first. Its only purpose is to safely view the raw data from your meter in the ESPHome logs without crashing the device.
 
 ```yaml
+# Keep secrets.yaml local and never commit it; this repo ignores secrets.yaml.
 # In your secrets.yaml file, you should have:
 # wifi_ssid: "YourNetwork"
 # wifi_password: "YourPassword"
@@ -116,7 +117,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: main
+      ref: v1.2.0
     components: [ dsmr_custom ]
 
 # --- DSMR Hub ---

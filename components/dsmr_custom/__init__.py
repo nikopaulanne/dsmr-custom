@@ -84,7 +84,7 @@ def _validate_key(value):
             parts_int.append(int(part, 16))
         except ValueError:
             raise cv.Invalid(
-                f"Decryption key part '{part}' is not a valid hexadecimal number."
+                f"Decryption key must contain only hexadecimal characters (0-9, A-F)."
             )
     return "".join(f"{part:02X}" for part in parts_int)
 

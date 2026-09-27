@@ -43,7 +43,7 @@ The repository's example configuration and Home Assistant entities show active u
 3. The lenient identification-line handling is intentional for Nordic meters. Do not tighten it to the Dutch DSMR identification grammar without captured Nordic regression fixtures.
 4. ESP32 review found no confirmed UART buffer overwrite from the inspected paths, but the configured telegram length, terminator byte, vector/string allocations, and long frames should get explicit boundary and memory tests.
 5. ESP-IDF crypto integration has two separate compatibility concerns. `post_build.py` discovers Mbed TLS archives under PlatformIO's generated component build tree and selects `mbedcrypto` on IDF 5 or `tfpsacrypto` on IDF 6, but still depends on that build-tree layout. IDF 6+ uses PSA Crypto for AES-GCM, avoiding the legacy Mbed TLS cipher-ID dependency. The PSA branch passes host tests and an ESPHome 2026.9.0 native-toolchain ESP32 build against IDF 6.0.1. The PlatformIO build also passed after manually running the generated `bootloader_ld_in_preprocess` target; its initial failure was in generated bootloader-script preprocessing before the component hook. Espressif documents PSA as the primary cryptography interface in its [ESP-IDF 6 migration guide](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/migration-guides/release-6.x/6.0/security.html), and the [PSA AEAD API](https://arm-software.github.io/psa-api/crypto/1.1/api/ops/aead.html) defines the authenticated decrypt call used here.
-6. The supplied `slimmelezer` YAML logs the runtime decryption key in plaintext from its API service. Remove that log statement before using the example; never log key material.
+6. The supplied `slimmelezer` YAML logs only fixed status messages when the runtime key is applied or updated; it does not log the key value. It does persist the API-provided key in an ESPHome global with `restore_value: true`, and the example does not configure encryption at rest. Keep this storage behavior clear in the example and never log key material.
 
 ## Repair plan
 
@@ -85,7 +85,7 @@ The repository's example configuration and Home Assistant entities show active u
 
 ### Phase 6 — Docs, examples, and release process (documentation updated; release pending)
 
-- Remove any example logging of encryption keys and show secrets-backed configuration for keys.
+- Keep examples free of key values in logs, show secrets-backed configuration for compile-time keys, and document that the runtime-key example persists its key in ESPHome preferences without configuring encryption at rest.
 - Correct compatibility claims and separate compile-tested support from runtime-tested support.
 - Explain the native ESPHome component boundary: built-in `dsmr` is not a replacement for Nordic P1 OBIS definitions; `dlms_meter` parses DLMS/COSEM and does not consume these ASCII P1 telegrams.
 - Add migration notes for entity identity, encryption, `custom_obis_sensors`, and raw telegram diagnostics.
