@@ -7,3 +7,5 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 *.log
+__pycache__/
+*.py[cod]

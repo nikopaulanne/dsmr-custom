@@ -2,7 +2,6 @@
  * NOTE: This is a vendored version of a file with origins in avr-libc,
  * adapted for the dsmr_custom component. The original license is preserved below.
  *
- * Modifications are Copyright (c) 2025 (Niko Paulanne).
  * These modifications are licensed under the GPLv3, as part of the
  * dsmr_custom ESPHome component.
  *

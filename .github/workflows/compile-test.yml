@@ -4,8 +4,31 @@ on:
   pull_request:
   push:
     branches: [main, dev]
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
 
 jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install host test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake g++ libssl-dev
+
+      - name: Check framework-specific code guards
+        run: bash scripts/check-framework-guards.sh
+
+      - name: Build and run host tests
+        run: |
+          cmake -S tests -B ../dsmr-custom-host-tests
+          cmake --build ../dsmr-custom-host-tests --parallel
+          ctest --test-dir ../dsmr-custom-host-tests --output-on-failure
+
   compile:
     runs-on: ubuntu-latest
     strategy:
@@ -13,8 +36,12 @@ jobs:
       matrix:
         test-config:
           - test-arduino-esp8266.yaml
+          - test-arduino-esp32.yaml
           - test-espidf-esp32.yaml
           - test-espidf-esp32c6.yaml
+        esphome-version:
+          - "2025.5.0"
+          - latest
     
     steps:
       - name: Checkout code
@@ -23,19 +50,23 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
       
       - name: Cache pip packages
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ matrix.esphome-version }}
           restore-keys: |
             ${{ runner.os }}-pip-
       
       - name: Install ESPHome
         run: |
-          pip install esphome
+          if [ "${{ matrix.esphome-version }}" = "latest" ]; then
+            pip install esphome
+          else
+            pip install "esphome==${{ matrix.esphome-version }}"
+          fi
       
       - name: Compile ${{ matrix.test-config }}
         run: |
@@ -45,8 +76,8 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ matrix.test-config }}
+          name: firmware-${{ matrix.esphome-version }}-${{ matrix.test-config }}
           path: |
-            .esphome/build/**/firmware.bin
-            .esphome/build/**/firmware.elf
+            test-configs/.esphome/build/**/firmware.bin
+            test-configs/.esphome/build/**/firmware.elf
           retention-days: 7

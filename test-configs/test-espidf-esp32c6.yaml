@@ -22,9 +22,8 @@ logger:
   level: INFO
 
 api:
-  # Note: Decryption key not supported in ESP-IDF builds
-  # encryption:
-  #   key: "test_key_32_characters_long=="
+  encryption:
+    key: "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
 
 ota:
   platform: esphome
@@ -45,6 +44,7 @@ external_components:
 dsmr_custom:
   id: dsmr_hub
   uart_id: uart_bus
+  decryption_key: "00112233445566778899aabbccddeeff"
   max_telegram_length: 1700
   crc_check: true
 

@@ -1,8 +1,10 @@
 # dsmr-custom - Enhanced DSMR P1 Component for ESPHome
 
-**Version:** 1.2.0
+**Latest release:** v1.2.0
 
-**ESPHome Compatibility:** 2025.5.x or newer
+**ESPHome Compatibility (current source):** ESPHome 2025.5.0 is the minimum build-tested release; CI also checks the current release.
+
+**Home Assistant validation (current source):** Hardware smoke-tested with Home Assistant Core 2026.9.3 and ESPHome Device Builder 2026.9.0. Earlier Home Assistant releases are outside the current support target.
 
 ## Framework Support
 
@@ -10,22 +12,19 @@ This component supports both Arduino and ESP-IDF frameworks with different featu
 
 ### Supported Frameworks
 
-- ✅ **Arduino Framework**: ESP8266, ESP32, ESP32-S2/S3/C3
-  - **Full support** including encrypted telegram decryption
-  - Tested and stable
-- ✅ **ESP-IDF Framework**: ESP32, ESP32-C6, ESP32-H2
-  - **Full support** including encrypted telegram decryption
-  - Uses hardware acceleration on supported chips (e.g. ESP32-C6)
-  - *Note: Encryption support is currently experimental and needs field testing*
+- ✅ **Arduino Framework**: ESP8266 and ESP32 (both compile-tested). Live unencrypted P1 data was verified on a Slimmelezer running Arduino.
+  - Encrypted telegram support remains experimental. It was previously reported working on a D1 Mini with v1.2.0, but has not been validated in the current hardware test.
+- ⚠️ **ESP-IDF Framework**: ESP32 and ESP32-C6 (compile-tested).
+  - Encrypted telegram support remains experimental; there is no encrypted-meter hardware test. AES-GCM host tests pass, the ESP-IDF 5 ESP32/ESP32-C6 builds compile, and a native ESP-IDF 6.0.1 ESP32 build compiles and links. The PlatformIO IDF 6 link hook remains unverified.
 
 ### Which Framework Should I Use?
 
 | **Your Situation** | **Recommended Framework** |
 |-------------------|--------------------------|
-| My meter sends **encrypted** telegrams | ✅ Arduino (Stable) or ESP-IDF (Experimental) |
+| My meter sends **encrypted** telegrams | ⚠️ Arduino (reported on D1 Mini) or ESP-IDF (compile-tested; field testing needed) |
 | My meter sends **unencrypted** telegrams | ✅ Arduino or ESP-IDF |
-| I have ESP32-C6 or ESP32-H2 | ✅ ESP-IDF |
-| I have ESP8266 or classic ESP32 | ✅ Arduino (fully tested) |
+| I have an ESP32-C6 | ✅ ESP-IDF (compile-tested) |
+| I have ESP8266 or classic ESP32 | ✅ Arduino (both compile-tested) |
 
 > **Note:** Most Dutch smart meters send unencrypted telegrams. Check your meter's specifications if unsure.
 
@@ -37,7 +36,7 @@ esp8266:
   board: d1_mini
 
 dsmr_custom:
-  decryption_key: "AABBCCDDEEFF00112233445566778899"  # ✅ Supported
+  decryption_key: !secret dsmr_decryption_key  # Experimental; store the key in secrets.yaml
 ```
 
 **ESP-IDF (ESP32-C6)**
@@ -48,10 +47,8 @@ esp32:
     type: esp-idf
 
 dsmr_custom:
-  decryption_key: "AABBCCDDEEFF00112233445566778899"  # ✅ Supported (Experimental)
+  decryption_key: !secret dsmr_decryption_key  # Experimental; store the key in secrets.yaml
 ```
-
-**Author:** Niko Paulanne
 
 **Parser Base:** `glmnet/Dsmr` (v0.8), vendored and modified. Original by Matthijs Kooijman.
 
@@ -65,7 +62,7 @@ This guide will get you running in minutes and show you the most stable way to d
 
 ### Step 1: Add the Component to your Configuration
 
-Instead of copying files manually, you can add this component directly to your device's `.yaml` file. This will make ESPHome automatically download the correct version from GitHub.
+Instead of copying files manually, you can add this component directly to your device's `.yaml` file. The `main` branch contains the current compatibility work; once a new release is published, pin its version tag for reproducible installs.
 
 Add the following `external_components` block to your YAML:
 ```yaml
@@ -73,7 +70,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: v1.2.0
+      ref: main
     components: [ dsmr_custom ]
 ```
 
@@ -86,6 +83,7 @@ Use this minimal configuration first. Its only purpose is to safely view the raw
 # wifi_ssid: "YourNetwork"
 # wifi_password: "YourPassword"
 # esphome_api_encryption_key: "GENERATE_A_KEY_HERE"
+# dsmr_decryption_key: "YOUR_32_HEX_CHARACTER_KEY" # Only for encrypted meters
 
 esphome:
   name: dsmr-diagnostics
@@ -102,6 +100,7 @@ api:
     key: !secret esphome_api_encryption_key
 
 ota:
+  - platform: esphome
 
 # The logger is essential for viewing the telegram data
 logger:
@@ -117,7 +116,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: 1.2.0
+      ref: main
     components: [ dsmr_custom ]
 
 # --- DSMR Hub ---
@@ -137,6 +136,7 @@ text_sensor:
     # This captures the full telegram but does NOT send it to a Home Assistant state.
     # Instead, a lightweight on_value trigger prints the data to the logs.
     telegram:
+      name: "Full Telegram"
       internal: true # This prevents the state from being sent to Home Assistant
       on_value:
         - logger.log:
@@ -149,11 +149,11 @@ text_sensor:
 ### Step 3: View Logs and Collect OBIS Codes
 
 1.  Install the minimal configuration above to your device.
-2.  In Home Assistant, navigate to **Settings > Add-ons > ESPHome**.
-3.  Select your device (`dsmr-diagnostics`) from the dashboard and click the **LOGS** button.
+2.  Open **ESPHome Device Builder** in Home Assistant.
+3.  Select `dsmr-diagnostics` and open its logs.
 4.  Wait for the device to connect and receive a data packet from your meter.
 5.  You will see a clearly marked block of text appear in the logs, starting with `--- FULL TELEGRAM RECEIVED ---`. This is the complete, raw data packet from your meter.
-6.  **Copy this entire block of text** (from the start line to the end line) to your clipboard. You now have a complete list of all OBIS codes your meter provides.
+6.  Copy the block locally to identify the OBIS codes your meter provides. Treat raw telegrams as private; remove meter identifiers and live readings before sharing them publicly.
 
 ### Step 4: Configure Your Final Sensors
 
@@ -188,7 +188,7 @@ dsmr_custom:
     * **Configurable M-Bus Channel IDs:** Allows M-Bus channel IDs for gas/water meters to be configured via YAML.
 * **Standard DSMR Sensor Support:** Option to define common sensors (energy, power, etc.) via standard `sensor:` and `text_sensor:` platforms.
 * **Sensor Override Mechanism:** A custom OBIS sensor will always take precedence over a standard sensor if they target the same OBIS code, preventing duplicate entities.
-* **Encrypted Telegram Support (Experimental):** Decrypts AES-128 GCM encrypted P1 telegrams (e.g., for Luxembourg meters). **Note: This feature is considered experimental and has not been tested on physical hardware.**
+* **Encrypted Telegram Support (Experimental):** Supports AES-128 GCM encrypted P1 telegrams (e.g., for Luxembourg meters). Arduino decryption was reported working on a D1 Mini with v1.2.0; ESP-IDF has compile verification but needs field reports from users with encrypted meters. Other meter and board combinations remain unverified.
 * **`request_pin` Support:** Allows active data requests by controlling the P1 port's Data Request (RTS) pin.
 
 ### Detailed Configuration
@@ -204,7 +204,7 @@ dsmr_custom:
   max_telegram_length: 1700 # Optional, default: 1500. Max bytes for a telegram.
   receive_timeout: "600ms"  # Optional, default: "200ms". Timeout for receiving data.
   crc_check: true           # Optional, default: true. Perform CRC check on telegrams.
-  decryption_key: "YOUR_32_CHAR_HEX_DECRYPTION_KEY" # Optional. For encrypted telegrams.
+  decryption_key: !secret dsmr_decryption_key # Optional; keep the key in secrets.yaml.
   # Note: See docs/aes-gcm-implementation-notes.md for technical details on ESP-IDF encryption support
   request_pin: D5           # Optional. GPIO pin for Data Request (RTS). E.g., D5.
   request_interval: "10s"   # Optional, default: "0s". Interval for active data requests.

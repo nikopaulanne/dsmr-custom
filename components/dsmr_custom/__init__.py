@@ -4,7 +4,6 @@
 # This file is inspired by or based on the original ESPHome DSMR component,
 # available at: https://github.com/esphome/esphome/tree/dev/esphome/components/dsmr
 #
-# Modifications and new code are Copyright (c) 2025 (Niko Paulanne).
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -31,7 +30,6 @@ from esphome.components import text_sensor as esphome_global_text_sensor
 
 DEPENDENCIES = ["uart"]
 AUTO_LOAD = ["sensor", "text_sensor"]
-CODEOWNERS = ["@nikopaulanne"]
 
 from esphome.const import (
     CONF_ID,
@@ -53,6 +51,7 @@ from esphome.const import (
 DOMAIN = "dsmr_custom"
 dsmr_custom_ns = cg.esphome_ns.namespace(DOMAIN)
 Dsmr = dsmr_custom_ns.class_("Dsmr", cg.Component, uart.UARTDevice)
+_sensitive = getattr(cv, "sensitive", lambda validator: validator)
 
 COMPONENT_DIRECTORY = Path(__file__).parent.resolve()
 
@@ -109,7 +108,7 @@ CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(Dsmr),
         cv.Optional(CONF_MAX_TELEGRAM_LENGTH, default=1500): cv.positive_int,
-        cv.Optional(CONF_DECRYPTION_KEY): _validate_key,
+        cv.Optional(CONF_DECRYPTION_KEY): _sensitive(_validate_key),
         cv.Optional(CONF_REQUEST_PIN): pins.gpio_output_pin_schema,
         cv.Optional(CONF_REQUEST_INTERVAL, default="0s"): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_RECEIVE_TIMEOUT, default="200ms"): cv.positive_time_period_milliseconds,
@@ -133,7 +132,7 @@ async def to_code(config):
 
     # Platform-specific crypto library configuration
     from esphome.core import CORE
-    if not CORE.using_esp_idf:
+    if CORE.using_arduino:
         # Arduino: Use rweather/Crypto library
         cg.add_library("rweather/Crypto", "0.4.0")
     else:

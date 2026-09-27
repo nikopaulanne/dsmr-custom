@@ -2,7 +2,6 @@
  * NOTE: This is a vendored and modified version of a file from the
  * glmnet/Dsmr project. The original license is preserved below.
  *
- * Modifications are Copyright (c) 2025 (Niko Paulanne).
  * These modifications are licensed under the GPLv3, as part of the
  * dsmr_custom ESPHome component.
  *
@@ -47,7 +46,6 @@
  * @details Provides ObisId, ParseResult, and other helpers. This version has been
  * modified for dsmr_custom to use trailing underscores for member variables for
  * ESPHome C++ style compliance.
- * @author Niko Paulanne
  */
 
 // BEGIN MODIFICATION FOR ESPHOME DSMR_CUSTOM

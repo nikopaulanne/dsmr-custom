@@ -5,7 +5,6 @@
  * available at:
  * https://github.com/esphome/esphome/tree/dev/esphome/components/dsmr
  *
- * Modifications and new code are Copyright (c) 2025 (Niko Paulanne).
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,7 +28,6 @@
  * is inspired by the native ESPHome DSMR component, but it has been
  * specifically implemented to support custom OBIS sensors and to interact with
  * a modified local parser for enhanced compatibility.
- * @author Niko Paulanne
  * @date June 7, 2025
  */
 
@@ -37,6 +35,7 @@
     defined(USE_ESP_IDF) // Guard for supported platforms
 
 #include "dsmr.h"                 // Header for this component's Dsmr class
+#include "crypto_helpers.h"
 #include "esphome/core/helpers.h" // For YESNO, etc.
 #include "esphome/core/log.h"
 
@@ -45,7 +44,7 @@
 #include <AES.h>
 #include <GCM.h>
 #else
-// ESP-IDF: Use vendored MbedTLS wrapper
+// ESP-IDF: Use the ESP-IDF AES-GCM wrapper
 #include "dsmr_crypto.h"
 #endif
 
@@ -437,7 +436,16 @@ void Dsmr::receive_encrypted_telegram_() {
       }
       size_t len_info = (static_cast<size_t>(this->crypt_telegram_[11]) << 8) |
                         static_cast<size_t>(this->crypt_telegram_[12]);
-      this->crypt_telegram_len_ = 18 + len_info + 12;
+      if (!encrypted_frame_size(len_info, this->max_telegram_len_,
+                                &this->crypt_telegram_len_)) {
+        ESP_LOGE(TAG,
+                 "Encrypted frame payload length (%zu) is invalid for buffer "
+                 "size (%zu). Discarding.",
+                 len_info, this->max_telegram_len_);
+        this->reset_telegram_();
+        this->stop_requesting_data_();
+        return;
+      }
       ESP_LOGV(TAG,
                "Encrypted telegram expected total frame length: %zu bytes "
                "(LEN_INFO: %zu)",
@@ -460,8 +468,8 @@ void Dsmr::receive_encrypted_telegram_() {
         TAG,
         "End of encrypted telegram frame found (read %zu bytes, expected %zu).",
         this->crypt_bytes_read_, this->crypt_telegram_len_);
-    size_t ciphertext_offset = 18;
-    size_t gcm_tag_length = 12;
+    const size_t ciphertext_offset = DSMR_ENCRYPTED_FRAME_HEADER_SIZE;
+    const size_t gcm_tag_length = DSMR_ENCRYPTED_FRAME_TAG_SIZE;
     size_t len_info_from_frame =
         (static_cast<size_t>(this->crypt_telegram_[11]) << 8) |
         static_cast<size_t>(this->crypt_telegram_[12]);
@@ -497,8 +505,6 @@ void Dsmr::receive_encrypted_telegram_() {
              iv[0], iv[1], iv[2], iv[3], iv[4], iv[5], iv[6], iv[7], iv[8],
              iv[9], iv[10], iv[11]);
     uint8_t *ciphertext_ptr = &this->crypt_telegram_[ciphertext_offset];
-    uint8_t *tag_ptr =
-        &this->crypt_telegram_[ciphertext_offset + ciphertext_len];
     if (ciphertext_len > this->max_telegram_len_) {
       ESP_LOGE(TAG,
                "Decrypted data length (%zu) would exceed plain telegram_ "
@@ -510,6 +516,8 @@ void Dsmr::receive_encrypted_telegram_() {
     }
 
 #ifdef USE_ARDUINO
+    uint8_t *tag_ptr =
+        &this->crypt_telegram_[ciphertext_offset + ciphertext_len];
     // Arduino: Use Crypto library
     GCM<AES128> gcmaes128;
     gcmaes128.setKey(this->decryption_key_.data(), gcmaes128.keySize());
@@ -524,10 +532,10 @@ void Dsmr::receive_encrypted_telegram_() {
       return;
     }
 #else
-    // ESP-IDF: Use vendored MbedTLS wrapper
+    // ESP-IDF: IDF 5 uses AES-GCM; IDF 6+ uses PSA Crypto
     int decrypt_result = dsmr_aes_gcm_decrypt(
         this->decryption_key_.data(), this->decryption_key_.size(), iv,
-        sizeof(iv), ciphertext_ptr, ciphertext_len, tag_ptr, gcm_tag_length,
+        sizeof(iv), ciphertext_ptr, ciphertext_len, gcm_tag_length,
         reinterpret_cast<unsigned char *>(this->telegram_));
 
     if (decrypt_result != 0) {
@@ -536,7 +544,7 @@ void Dsmr::receive_encrypted_telegram_() {
       this->stop_requesting_data_();
       return;
     }
-    ESP_LOGD(TAG, "ESP-IDF: Decryption successful using vendored MbedTLS.");
+    ESP_LOGD(TAG, "ESP-IDF: AES-GCM decryption successful.");
 #endif
 
     this->telegram_[ciphertext_len] = '\0';
@@ -894,11 +902,11 @@ void Dsmr::set_decryption_key(const std::string &decryption_key_hex) {
     }
     return;
   }
-  if (decryption_key_hex.length() != 32) {
+  uint8_t parsed_key[DSMR_AES128_KEY_SIZE];
+  if (!parse_aes128_key(decryption_key_hex, parsed_key)) {
     ESP_LOGE(TAG,
-             "Error: Decryption key must be 32 hexadecimal characters long (is "
-             "%zu). Decryption disabled.",
-             decryption_key_hex.length());
+             "Error: Decryption key must be exactly 32 hexadecimal "
+             "characters. Decryption disabled.");
     this->decryption_key_.clear();
     if (this->crypt_telegram_ != nullptr) {
       delete[] this->crypt_telegram_;
@@ -906,15 +914,8 @@ void Dsmr::set_decryption_key(const std::string &decryption_key_hex) {
     }
     return;
   }
-  this->decryption_key_.assign(16, 0);
+  this->decryption_key_.assign(parsed_key, parsed_key + DSMR_AES128_KEY_SIZE);
   ESP_LOGI(TAG, "DSMR telegram decryption key is set.");
-  ESP_LOGV(TAG, "Using decryption key (hex): %s", decryption_key_hex.c_str());
-  for (int i = 0; i < 16; i++) {
-    char temp_hex_pair[3] = {decryption_key_hex[i * 2],
-                             decryption_key_hex[i * 2 + 1], '\0'};
-    this->decryption_key_[i] =
-        static_cast<uint8_t>(std::strtoul(temp_hex_pair, nullptr, 16));
-  }
   if (this->crypt_telegram_ == nullptr) {
     this->crypt_telegram_ = new uint8_t[this->max_telegram_len_ + 1];
     if (this->crypt_telegram_ == nullptr) {

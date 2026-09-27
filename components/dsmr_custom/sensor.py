@@ -4,7 +4,6 @@
 # This file is inspired by or based on the original ESPHome DSMR component,
 # available at: https://github.com/esphome/esphome/tree/dev/esphome/components/dsmr
 #
-# Modifications and new code are Copyright (c) 2025 (Niko Paulanne).
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

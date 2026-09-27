@@ -2,7 +2,6 @@
  * NOTE: This is a vendored and modified version of a file from the
  * glmnet/Dsmr project. The original license is preserved below.
  *
- * Modifications are Copyright (c) 2025 (Niko Paulanne).
  * These modifications are licensed under the GPLv3, as part of the
  * dsmr_custom ESPHome component.
  *
@@ -47,7 +46,6 @@
  * @brief Vendored and modified P1 telegram parser core from glmnet/arduino-dsmr.
  * @details Defines the main P1Parser class. This version includes lenient header
  * parsing and uses consistent underscored member access for utility structs.
- * @author Niko Paulanne
  */
 
 // BEGIN MODIFICATION FOR ESPHOME DSMR_CUSTOM

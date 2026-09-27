@@ -21,11 +21,17 @@ fi
 
 # Check for unguarded String += operations in critical files
 echo "Checking String += operations in util.h..."
-if grep -n "error_string +=" components/dsmr_custom/util.h 2>/dev/null | grep -v "#ifdef"; then
-    echo "❌ ERROR: Found unguarded String += in util.h!"
-    errors=$((errors + 1))
+if awk '
+    /#ifdef USE_ARDUINO/ { arduino_branch = 1; next }
+    /#else/ { arduino_branch = 0; next }
+    /#endif/ { arduino_branch = 0; next }
+    /error_string[[:space:]]*\+=/ && !arduino_branch { print; failed = 1 }
+    END { exit failed }
+' components/dsmr_custom/util.h; then
+    echo "✅ Arduino String operations are confined to Arduino branches"
 else
-    echo "✅ String operations are properly guarded"
+    echo "❌ ERROR: Found String += outside a USE_ARDUINO branch in util.h!"
+    errors=$((errors + 1))
 fi
 
 # Check that AUTO_LOAD is present
