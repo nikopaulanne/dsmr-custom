@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Updated ESPHome framework selection for current releases and documented the tested minimum/current version matrix.
-- Migrated ESP-IDF 6+ AES-GCM decryption to PSA Crypto, retained the ESP-IDF 5 hardware AES-GCM path, and updated linker archive discovery for both Mbed TLS layouts. Host tests and a native-toolchain ESP-IDF 6.0.1 ESP32 build pass; the PlatformIO IDF 6 attempt stops before firmware linking because `bootloader.ld` is missing.
+- Migrated ESP-IDF 6+ AES-GCM decryption to PSA Crypto, retained the ESP-IDF 5 hardware AES-GCM path, and updated linker archive discovery for both Mbed TLS layouts. Host tests and a native-toolchain ESP-IDF 6.0.1 ESP32 build pass. The PlatformIO IDF 6.0.1 build also passes after manually running ESP-IDF's `bootloader_ld_in_preprocess` Ninja target on a clean build; the firmware link then runs `post_build.py` and links `tfpsacrypto`.
 - Clarified that encrypted telegram support is experimental and that the hardware smoke test covered unencrypted P1 data only.
 - Closed issue #10 without a component parser change; splitting multi-value OBIS text remains a Home Assistant configuration task.
 

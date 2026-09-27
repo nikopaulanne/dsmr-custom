@@ -15,7 +15,7 @@ This component supports both Arduino and ESP-IDF frameworks with different featu
 - ✅ **Arduino Framework**: ESP8266 and ESP32 (both compile-tested). Live unencrypted P1 data was verified on a Slimmelezer running Arduino.
   - Encrypted telegram support remains experimental. It was previously reported working on a D1 Mini with v1.2.0, but has not been validated in the current hardware test.
 - ⚠️ **ESP-IDF Framework**: ESP32 and ESP32-C6 (compile-tested).
-  - Encrypted telegram support remains experimental; there is no encrypted-meter hardware test. AES-GCM host tests pass, the ESP-IDF 5 ESP32/ESP32-C6 builds compile, and a native ESP-IDF 6.0.1 ESP32 build compiles and links. The PlatformIO IDF 6 link hook remains unverified.
+  - Encrypted telegram support remains experimental; there is no encrypted-meter hardware test. AES-GCM host tests pass, the ESP-IDF 5 ESP32/ESP32-C6 builds compile, and native and PlatformIO ESP-IDF 6.0.1 ESP32 builds compile and link. The PlatformIO build needs its generated bootloader linker script preprocessed once on a clean build.
 
 ### Which Framework Should I Use?
 

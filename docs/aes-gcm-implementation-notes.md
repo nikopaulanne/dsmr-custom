@@ -13,7 +13,7 @@ or authentication tag handling works in the field.
 |---|---|---|---|
 | Arduino | `rweather/Crypto` 0.4.0 | ESP8266 and ESP32 compile tests pass. A previous community report described successful decryption on a D1 Mini with v1.2.0. | Experimental; the community result has not been reproduced by the maintainer, and the current Slimmelezer hardware test used an unencrypted telegram. |
 | ESP-IDF 5 | ESP-IDF `esp_aes_gcm_auth_decrypt()` API, with libraries linked by `post_build.py` | ESP32 and ESP32-C6 target builds pass. An OpenSSL-backed host shim exercises the production wrapper against an AES-GCM known-answer vector and a modified tag. | Experimental; no real encrypted meter has been tested. |
-| ESP-IDF 6+ | PSA Crypto `psa_aead_decrypt()` with AES-GCM and the configured 12-byte tag | ESPHome 2026.9.0 native-toolchain ESP32 build with IDF 6.0.1 compiled and linked. The PlatformIO attempt compiled the component but stopped at bootloader linking because `bootloader.ld` was missing. Host tests also check a known-answer vector and modified-tag rejection. | Experimental; no real encrypted meter has been tested. |
+| ESP-IDF 6+ | PSA Crypto `psa_aead_decrypt()` with AES-GCM and the configured 12-byte tag | ESPHome 2026.9.0 native-toolchain ESP32 build with IDF 6.0.1 compiled and linked. A PlatformIO IDF 6.0.1 build also compiled and linked after manually running the generated bootloader linker-script preprocessing target; `post_build.py` linked `tfpsacrypto`. Host tests check a known-answer vector and modified-tag rejection. | Experimental; no real encrypted meter has been tested. |
 
 ESP-IDF provides an AES-GCM API that may use platform acceleration. This project
 has not benchmarked it, so no speedup claim is made.
@@ -29,17 +29,21 @@ ciphertext format. Both APIs authenticate the tag before the component accepts
 the plaintext.
 
 The host suite compiles the IDF 5 and PSA source branches against OpenSSL-backed
-API shims. An ESPHome 2026.9.0 native-toolchain build also compiled and linked
-the ESP32 firmware against IDF 6.0.1. A separate PlatformIO attempt compiled
-`dsmr_crypto_impl.cpp` but failed during bootloader linking, before the main
-firmware link and `post_build.py` hook ran. The PSA source and native IDF 6 link
-are verified; the PlatformIO IDF 6 path is not.
+API shims. An ESPHome 2026.9.0 native-toolchain build compiled and linked the
+ESP32 firmware against IDF 6.0.1. On PlatformIO, the first clean build stopped
+at bootloader linking because the generated linker script had not been
+preprocessed. Running the generated Ninja target
+`bootloader_ld_in_preprocess` and retrying allowed the full firmware link and
+`post_build.py` hook to pass; the hook selected `tfpsacrypto` as expected. This
+is a generated-build workaround for the legacy PlatformIO path, not a change to
+the component crypto source.
 
 The current `post_build.py` script locates the Mbed TLS archives under
 PlatformIO's generated ESP-IDF build directory. It accepts `mbedcrypto` on IDF 5
-and `tfpsacrypto` on IDF 6. This workaround still depends on the generated build
-tree. The native IDF 6 build does not use this SCons hook, and the PlatformIO
-attempt did not reach it, so the hook has not yet been verified with IDF 6.
+and `tfpsacrypto` on IDF 6. The hook passed an IDF 6.0.1 firmware link after the
+bootloader linker-script preprocessing target was run. It still depends on the
+generated build-tree layout. The native IDF 6 toolchain links through CMake and
+does not use this SCons hook.
 
 ## What the tests establish
 
@@ -67,8 +71,9 @@ telegram or key to a public issue.
 ## Future work
 
 - Replace the generated-path linker workaround with a supported dependency/link
-  mechanism if ESPHome exposes one for external components; verify or retire
-  the PlatformIO IDF 6 path.
+  mechanism if ESPHome exposes one for external components. Prefer the native
+  ESP-IDF toolchain; the legacy PlatformIO IDF 6 path requires a one-time
+  bootloader linker-script preprocessing workaround on a clean build.
 - Keep a target compile and link check against the native ESP-IDF 6+ toolchain.
 - Keep synthetic-key tests and target compile checks in CI.
 - Request user field reports that include board, framework, meter family, and

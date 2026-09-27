@@ -83,11 +83,21 @@ repeat this check, use a copy of `test-espidf-esp32.yaml`, set
 "$ESPHOME" --toolchain esp-idf compile path/to/test-espidf6.yaml
 ```
 
-The PlatformIO route was also attempted with ESP-IDF 6.0.1. It compiled the
-`dsmr_custom` crypto source but failed during bootloader linking because
-`bootloader.ld` was missing; it did not reach the firmware link or the
-`post_build.py` hook. The native-toolchain check verifies the PSA code and IDF 6
-link, but does not verify that PlatformIO hook.
+The PlatformIO route was also checked with ESP-IDF 6.0.1. Its first clean build
+compiled the component but stopped at bootloader linking because the generated
+`bootloader.ld` script had not been preprocessed. After that first attempt has
+generated the Ninja files, run ESP-IDF's preprocessing target and retry:
+
+```bash
+ninja -C "$ESPHOME_DATA_DIR/build/test-espidf6-pio/.pioenvs/test-espidf6-pio/bootloader" bootloader_ld_in_preprocess
+"$ESPHOME" --toolchain platformio compile ../local-test-artifacts/test-espidf6-pio.yaml
+```
+
+The retry compiled and linked the full firmware. It also ran `post_build.py`,
+which found and linked IDF 6's `tfpsacrypto` archive. The workaround affects
+only the generated build directory; the native `esp-idf` toolchain builds IDF
+6.0.1 without it. ESPHome has deprecated the PlatformIO toolchain and plans to
+remove it in 2027.2.0, so native `esp-idf` remains the preferred path.
 
 ## Hardware smoke test
 
