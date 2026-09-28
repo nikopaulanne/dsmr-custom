@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.3.0] - 2026-09-28
 
 ### Changed
 - Updated ESPHome framework selection for current releases and documented the tested minimum/current version matrix.

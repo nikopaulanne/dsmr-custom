@@ -1,6 +1,6 @@
 # dsmr-custom - Enhanced DSMR P1 Component for ESPHome
 
-**Latest release:** v1.2.0
+**Latest release:** v1.3.0
 
 **ESPHome Compatibility (current source):** ESPHome 2025.5.0 is the minimum build-tested release; CI also checks the current release.
 
@@ -62,7 +62,7 @@ This guide will get you running in minutes and show you the most stable way to d
 
 ### Step 1: Add the Component to your Configuration
 
-Instead of copying files manually, you can add this component directly to your device's `.yaml` file. The latest published release is v1.2.0; use its version tag for reproducible installs. Use `main` only when testing unreleased changes, and update the tag to v1.3.0 after that release is published.
+Instead of copying files manually, you can add this component directly to your device's `.yaml` file. Use the `v1.3.0` version tag for reproducible installs. Use `main` only when testing unreleased changes.
 
 Add the following `external_components` block to your YAML:
 ```yaml
@@ -70,7 +70,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: v1.2.0
+      ref: v1.3.0
     components: [ dsmr_custom ]
 ```
 
@@ -117,7 +117,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: v1.2.0
+      ref: v1.3.0
     components: [ dsmr_custom ]
 
 # --- DSMR Hub ---

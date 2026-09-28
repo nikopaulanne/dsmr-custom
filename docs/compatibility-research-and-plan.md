@@ -1,7 +1,8 @@
 # dsmr-custom: compatibility research and repair plan
 
 **Prepared:** 2026-09-27
-**Repository baseline:** `main`, `v1.2.0-2-g7a873e8`
+**Release target:** `v1.3.0`
+**Research baseline:** `main`, `v1.2.0-2-g7a873e8` (when this research began)
 **Purpose:** plan compatibility work for current and future ESPHome/Home Assistant releases while preserving Nordic P1/SESKO support.
 
 ## Recommendation

@@ -35,7 +35,7 @@ esphome:
   name_add_mac_suffix: false # Set to true if you have multiple devices with the same name
   project:
     name: dsmr_custom.slimmelezer
-    version: "1.2.0"
+    version: "1.3.0"
 
   # The on_boot sequence is used here to apply a stored decryption key.
   # This is an advanced feature for meters that use encrypted telegrams (e.g., in Luxembourg).
@@ -171,7 +171,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/nikopaulanne/dsmr-custom
-      ref: v1.2.0
+      ref: v1.3.0
     components: [ dsmr_custom ]
     
 
