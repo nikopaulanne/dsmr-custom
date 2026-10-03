@@ -35,3 +35,16 @@ target_include_directories(crypto_helpers_test PRIVATE
   ../components/dsmr_custom
 )
 add_test(NAME crypto_helpers_test COMMAND crypto_helpers_test)
+
+add_executable(runtime_test
+  runtime_test.cpp
+  ../components/dsmr_custom/fields.cpp
+  ../components/dsmr_custom/dsmr_crypto_impl.cpp
+  host/psa_crypto_host.cpp
+)
+target_compile_features(runtime_test PRIVATE cxx_std_17)
+target_include_directories(runtime_test PRIVATE host/runtime host ../components/dsmr_custom)
+target_compile_definitions(runtime_test PRIVATE USE_ESP_IDF ESP_IDF_VERSION_MAJOR=6
+  DSMR_CUSTOM_GAS_MBUS_ID=3 DSMR_CUSTOM_WATER_MBUS_ID=4)
+target_link_libraries(runtime_test PRIVATE OpenSSL::Crypto)
+add_test(NAME runtime_test COMMAND runtime_test)

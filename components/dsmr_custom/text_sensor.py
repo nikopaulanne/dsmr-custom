@@ -134,53 +134,8 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
-    """
-    Generates C++ code to register standard DSMR text sensors with the dsmr_custom hub
-    and defines preprocessor macros for the C++ layer to use with the vendored parser.
-    """
-    # Retrieve the already instantiated dsmr_custom hub object using its ID.
     hub = await cg.get_variable(config[CONF_DSMR_CUSTOM_HUB_ID])
-
-    # List to store the C++ names of enabled standard text sensors for macro generation.
-    active_standard_text_sensors_for_macro = []
-
     for key, conf_item in config.items():
-        # Skip items that are not text_sensor configurations (e.g., the hub ID itself).
-        if not isinstance(conf_item, dict) or key == CONF_DSMR_CUSTOM_HUB_ID:
-            continue
-
-        # If a text_sensor configuration for 'key' is present in the YAML:
-        # 1. Create the C++ text_sensor object.
-        #    text_sensor.new_text_sensor() handles creating the Pvariable and basic setup.
-        var = await text_sensor.new_text_sensor(conf_item) # conf_item is the specific sensor's config
-
-        # 2. Register this standard text_sensor with the hub by calling its C++ setter method.
-        #    The setter method on the hub (e.g., hub.set_identification(var))
-        #    is expected to match the 'key'.
-        #    This also populates the standard_text_sensor_pointers_ map in C++
-        #    which is used by the override mechanism.
-        cg.add(getattr(hub, f"set_{key}")(var))
-
-        # 3. Add the key (symbolic name) to the list for C++ macro generation,
-        #    unless it's the special 'telegram' sensor, which might be handled
-        #    differently or not included in the standard field parsing list of the vendored parser.
-        #    The vendored parser (matthijskooijman/arduino-dsmr) does not typically have a
-        #    'telegram' field in its ParsedData struct; the full telegram is handled separately.
-        if key != "telegram": # Exclude 'telegram' from the macro list for parser fields
-            active_standard_text_sensors_for_macro.append(f"F({key})")
-
-    # Generate the DSMR_CUSTOM_TEXT_SENSOR_LIST C++ preprocessor macro.
-    # This macro is consumed by the C++ MyData struct (based on the vendored parser)
-    # and the publish_standard_sensors_() method in dsmr.cpp. It provides a list
-    # of symbolic field names for standard text sensors.
-    # DEVELOPER_NOTE_FOR_ESPHOME_DSMR_TEAM: This macro generation, similar to
-    # DSMR_CUSTOM_SENSOR_LIST in sensor.py, allows the C++ parser to be templatized
-    # with standard text fields. This aligns with ESPHome's architectural patterns.
-    if active_standard_text_sensors_for_macro:
-        cg.add_define(
-            "DSMR_CUSTOM_TEXT_SENSOR_LIST(F, sep)", # Macro signature expected by C++
-            cg.RawExpression(" sep ".join(active_standard_text_sensors_for_macro))
-        )
-    else:
-        # Define as empty if no standard text sensors (excluding 'telegram') are configured.
-        cg.add_define("DSMR_CUSTOM_TEXT_SENSOR_LIST(F, sep)", "")
+        if isinstance(conf_item, dict) and key != CONF_DSMR_CUSTOM_HUB_ID:
+            var = await text_sensor.new_text_sensor(conf_item)
+            cg.add(getattr(hub, f"set_{key}")(var))

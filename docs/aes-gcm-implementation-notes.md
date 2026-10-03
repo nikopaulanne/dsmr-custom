@@ -40,7 +40,10 @@ the component crypto source.
 
 The current `post_build.py` script locates the Mbed TLS archives under
 PlatformIO's generated ESP-IDF build directory. It accepts `mbedcrypto` on IDF 5
-and `tfpsacrypto` on IDF 6. The hook passed an IDF 6.0.1 firmware link after the
+and `tfpsacrypto` on IDF 6. On IDF 5, the component/port wrapper and
+upstream TLS archive can both be named `libmbedtls.a`; the hook selects the
+upstream archive and links its file explicitly to avoid wrapper shadowing.
+The hook passed an IDF 6.0.1 firmware link after the
 bootloader linker-script preprocessing target was run. It still depends on the
 generated build-tree layout. The native IDF 6 toolchain links through CMake and
 does not use this SCons hook.
@@ -54,8 +57,19 @@ does not use this SCons hook.
 - ESPHome compile tests verify the Arduino implementation on ESP8266 and ESP32,
   and the IDF 5 implementation on ESP32 and ESP32-C6. The native ESPHome
   toolchain also compiled and linked ESP32 firmware with IDF 6.0.1.
-- A live Slimmelezer test verified unencrypted P1 parsing and sensor updates.
-  It did not test decryption.
+- The Slimmelezer D1 Mini repeat test on 2026-10-02 used the updated local
+  component and ESPHome 2026.9.1. The maintainer confirmed successful build,
+  upload and unencrypted operation. It did not test meter decryption.
+- The production receive-path host test decrypts synthetic authenticated frames
+  and rejects a modified tag, checks key/mode changes and injects allocation
+  failures. It checks this implementation's framing assumptions rather than
+  interoperability with a physical encrypted meter.
+
+The 2026-10-02 verification passed the eight minimum/current firmware builds,
+both IDF 6.0.1 ESP32 toolchains, and the host suite with and without sanitizers.
+The PlatformIO IDF 6 recheck used the previously preprocessed bootloader script.
+See [TESTING.md](../TESTING.md) for the commands and the completed local hardware
+smoke test. Installation from the release tag remains to be checked once it exists.
 
 These checks cover code paths and API compatibility. They do not verify
 encrypted meter framing, key provisioning, real-meter interoperability,
@@ -69,6 +83,13 @@ Store compile-time keys in ESPHome `secrets.yaml` and reference them with
 encrypt a key embedded in firmware. The Slimmelezer example also accepts a
 runtime key through the encrypted ESPHome API and persists it in a global with
 `restore_value: true`; ESPHome preferences are not encrypted by this example.
+Keys contain exactly 32 ASCII hexadecimal characters (16 bytes), without spaces
+or prefixes. `set_decryption_key()` returns `false` for malformed input or a
+failed runtime buffer allocation and preserves the previous key. An empty
+string explicitly clears the key. Accepted key changes reset partial reception;
+the example persists the replacement only after acceptance. Reapplying the
+same valid key leaves the pending receive frame intact.
+
 Never print a key in logs, include a real key in an example, or attach an
 unredacted telegram or key to a public issue.
 

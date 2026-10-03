@@ -41,7 +41,7 @@ esphome:
   # This is an advanced feature for meters that use encrypted telegrams (e.g., in Luxembourg).
   # For most users (e.g., in Finland), this section can be ignored or removed.
   on_boot:
-    priority: -100 # Run early during boot.
+    priority: -100 # Apply the stored key after component setup.
     then:
       - if:
           condition:
@@ -71,11 +71,12 @@ esp8266:
 api:
   # IMPORTANT: Store your API encryption key in 'secrets.yaml'.
   # Example 'secrets.yaml' entry:
-  # esphome_api_encryption_key: "YOUR_32_CHARACTER_BASE64_API_KEY_HERE"
+  # esphome_api_encryption_key: "BASE64_ENCODED_32_BYTE_API_KEY_HERE"
   encryption:
     key: !secret esphome_api_encryption_key
 
-  # This service allows setting the DSMR decryption key dynamically from Home Assistant.
+  # This service accepts exactly 32 hexadecimal characters, or an empty string to disable decryption.
+  # Invalid replacements leave the current and stored key unchanged.
   # This is an advanced feature. If you don't use encrypted telegrams, you can remove this service.
   services:
     - service: set_dsmr_key
@@ -85,17 +86,17 @@ api:
         - logger.log:
             format: "API: Updating DSMR decryption key."
         - lambda: |-
-            if (private_key.length() == 32) {
+            if (!id(dsmr_hub).set_decryption_key(private_key)) {
+              return; // Leave the previously stored key unchanged on invalid input.
+            }
+            if (private_key.empty()) {
+              id(stored_decryption_key)[0] = '\0';
+              id(has_key) = false;
+            } else {
               private_key.copy(id(stored_decryption_key), 32);
               id(stored_decryption_key)[32] = '\0';
-              id(dsmr_hub).set_decryption_key(private_key);
-            } else {
-              id(stored_decryption_key)[0] = '\0';
-              id(dsmr_hub).set_decryption_key("");
+              id(has_key) = true;
             }
-        - globals.set:
-            id: has_key
-            value: !lambda "return private_key.length() == 32;"
 
 # --- WiFi Configuration ---
 wifi:
@@ -134,7 +135,7 @@ logger:
   baud_rate: 0 # Disable logging to UART0 (USB) to free up pins if needed. Set to 115200 to enable.
   level: INFO # Default log level. Change to DEBUG for more verbose output.
   logs:
-    dsmr_custom: DEBUG # Set specific log level for our custom component
+    dsmr_custom: INFO # Set both the global level and this level to DEBUG for diagnostics
 
 # Enable remote updates for this device.
 ota:
@@ -162,7 +163,8 @@ uart:
   id: uart_bus
   baud_rate: 115200
   rx_pin: D7 # This is the GPIO pin connected to the P1 port's data line.
-  # The buffer must be large enough to hold the entire P1 telegram.
+  # Separate UART queue; size it for incoming bytes between ESPHome loop calls.
+  # Whole telegrams are assembled incrementally in the component buffer.
   rx_buffer_size: 1700
 
 # --- External Component Definition ---
@@ -180,9 +182,9 @@ external_components:
 dsmr_custom:
   id: dsmr_hub
   uart_id: uart_bus
-  max_telegram_length: 1700
-  crc_check: true
-  receive_timeout: "600ms"
+  max_telegram_length: 1700 # Complete input-frame limit; separate from the UART queue
+  crc_check: true # Reject bad checksums for both standard and custom measurements
+  receive_timeout: "600ms" # Inactivity timeout while waiting for the header or more bytes
   # For meters that need an active signal to send data, uncomment the following:
   # request_pin: D5
   # request_interval: "10s"

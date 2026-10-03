@@ -50,6 +50,8 @@
 
 #include <algorithm> // For std::remove_if, std::min
 #include <cctype>    // For ::isspace, ::isalnum
+#include <cerrno>
+#include <new>
 #include <cstdlib>   // For std::strtoul, std::strtof
 #include <cstring>   // For memchr, memcpy, strlen, strchr
 #include <string>
@@ -71,83 +73,48 @@ static const char *const TAG_CUSTOM_SENSORS = "dsmr_custom.sensor";
  * telegrams.
  */
 Dsmr::Dsmr(uart::UARTComponent *uart, bool crc_check)
-    : uart::UARTDevice(uart), crc_check_(crc_check) {
-  this->initialize_standard_sensor_obis_map_();
+    : uart::UARTDevice(uart), crc_check_(crc_check) {}
+
+namespace {
+
+constexpr size_t MAX_BYTES_PER_LOOP = 256;
+
+bool parse_custom_obis_id(const std::string &code, ::dsmr::ObisId *id) {
+  std::string normalized = code;
+  std::replace(normalized.begin(), normalized.end(), '*', '.');
+  const auto result = ::dsmr::ObisIdParser::parse(
+      normalized.data(), normalized.data() + normalized.size());
+  if (result.err_ || result.next_ != normalized.data() + normalized.size())
+    return false;
+  *id = result.result_;
+  return true;
 }
 
-/**
- * @brief Initializes the standard_sensor_to_obis_map_.
- * @details This map links symbolic names of standard sensors (from Python
- * platform files) to their corresponding OBIS code strings as understood by the
- * vendored parser. CRUCIAL for the custom sensor override mechanism.
- */
-void Dsmr::initialize_standard_sensor_obis_map_() {
-  ESP_LOGV(TAG, "Initializing standard sensor to OBIS code map...");
-  // This list MUST align with the symbolic names used in
-  // sensor.py/text_sensor.py and the actual OBIS codes defined in the vendored
-  // fields.h
-  standard_sensor_to_obis_map_["energy_delivered_lux"] = "1-0:1.8.0";
-  standard_sensor_to_obis_map_["energy_delivered_tariff1"] = "1-0:1.8.1";
-  standard_sensor_to_obis_map_["energy_delivered_tariff2"] = "1-0:1.8.2";
-  // ... (Ensure this map is complete for ALL standard sensors defined in your
-  // fields.h and Python platforms) ...
-  standard_sensor_to_obis_map_["energy_returned_lux"] = "1-0:2.8.0";
-  standard_sensor_to_obis_map_["energy_returned_tariff1"] = "1-0:2.8.1";
-  standard_sensor_to_obis_map_["energy_returned_tariff2"] = "1-0:2.8.2";
-  standard_sensor_to_obis_map_["total_imported_energy"] = "1-0:3.8.0";
-  standard_sensor_to_obis_map_["total_exported_energy"] = "1-0:4.8.0";
-  standard_sensor_to_obis_map_["power_delivered"] = "1-0:1.7.0";
-  standard_sensor_to_obis_map_["power_returned"] = "1-0:2.7.0";
-  standard_sensor_to_obis_map_["reactive_power_delivered"] = "1-0:3.7.0";
-  standard_sensor_to_obis_map_["reactive_power_returned"] = "1-0:4.7.0";
-  standard_sensor_to_obis_map_["electricity_failures"] = "0-0:96.7.21";
-  standard_sensor_to_obis_map_["electricity_long_failures"] = "0-0:96.7.9";
-  standard_sensor_to_obis_map_["current_l1"] = "1-0:31.7.0";
-  standard_sensor_to_obis_map_["current_l2"] = "1-0:51.7.0";
-  standard_sensor_to_obis_map_["current_l3"] = "1-0:71.7.0";
-  standard_sensor_to_obis_map_["power_delivered_l1"] = "1-0:21.7.0";
-  standard_sensor_to_obis_map_["power_delivered_l2"] = "1-0:41.7.0";
-  standard_sensor_to_obis_map_["power_delivered_l3"] = "1-0:61.7.0";
-  standard_sensor_to_obis_map_["power_returned_l1"] = "1-0:22.7.0";
-  standard_sensor_to_obis_map_["power_returned_l2"] = "1-0:42.7.0";
-  standard_sensor_to_obis_map_["power_returned_l3"] = "1-0:62.7.0";
-  standard_sensor_to_obis_map_["reactive_power_delivered_l1"] = "1-0:23.7.0";
-  standard_sensor_to_obis_map_["reactive_power_delivered_l2"] = "1-0:43.7.0";
-  standard_sensor_to_obis_map_["reactive_power_delivered_l3"] = "1-0:63.7.0";
-  standard_sensor_to_obis_map_["reactive_power_returned_l1"] = "1-0:24.7.0";
-  standard_sensor_to_obis_map_["reactive_power_returned_l2"] = "1-0:44.7.0";
-  standard_sensor_to_obis_map_["reactive_power_returned_l3"] = "1-0:64.7.0";
-  standard_sensor_to_obis_map_["voltage_l1"] = "1-0:32.7.0";
-  standard_sensor_to_obis_map_["voltage_l2"] = "1-0:52.7.0";
-  standard_sensor_to_obis_map_["voltage_l3"] = "1-0:72.7.0";
-  standard_sensor_to_obis_map_["gas_delivered"] =
-      "0-1:24.2.1"; // Example for M-Bus ID 1
-  standard_sensor_to_obis_map_["gas_delivered_be"] =
-      "0-1:24.2.3"; // Example for M-Bus ID 1
-  standard_sensor_to_obis_map_
-      ["active_energy_import_maximum_demand_running_month"] = "1-0:1.6.0";
-  standard_sensor_to_obis_map_["identification"] =
-      "identification"; // Special key
-  standard_sensor_to_obis_map_["p1_version"] = "1-3:0.2.8";
-  standard_sensor_to_obis_map_["p1_version_be"] = "0-0:96.1.4";
-  standard_sensor_to_obis_map_["timestamp"] = "0-0:1.0.0";
-  standard_sensor_to_obis_map_["electricity_tariff"] = "0-0:96.14.0";
-  standard_sensor_to_obis_map_["message_long"] = "0-0:96.13.0";
-  standard_sensor_to_obis_map_["message_short"] = "0-0:96.13.1";
-  standard_sensor_to_obis_map_["gas_equipment_id"] =
-      "0-1:96.1.0"; // Example for M-Bus ID 1
+}  // namespace
 
-  ESP_LOGD(TAG, "Standard sensor OBIS map initialized with %zu entries.",
-           standard_sensor_to_obis_map_.size());
+bool Dsmr::has_custom_sensor_for_(const ::dsmr::ObisId &id) const {
+  for (const auto &definition : this->custom_obis_definitions_) {
+    if (definition.has_obis_id && definition.obis_id == id)
+      return true;
+  }
+  return false;
 }
 
 void Dsmr::setup() {
   ESP_LOGCONFIG(TAG, "Setting up dsmr_custom component...");
-  this->telegram_ = new char[this->max_telegram_len_ + 1];
+  this->telegram_ = new (std::nothrow) char[this->max_telegram_len_ + 1];
   if (this->telegram_ == nullptr) {
     ESP_LOGE(TAG, "Failed to allocate telegram_ buffer!");
     this->mark_failed();
     return;
+  }
+  if (this->has_decryption_key_) {
+    this->crypt_telegram_ = new (std::nothrow) uint8_t[this->max_telegram_len_ + 1];
+    if (this->crypt_telegram_ == nullptr) {
+      ESP_LOGE(TAG, "Failed to allocate encrypted telegram buffer!");
+      this->mark_failed();
+      return;
+    }
   }
   if (this->request_pin_ != nullptr) {
     this->request_pin_->setup();
@@ -157,38 +124,15 @@ void Dsmr::setup() {
 }
 
 void Dsmr::loop() {
-  if (this->ready_to_request_data_()) {
-    if (this->decryption_key_.empty()) {
-      this->receive_telegram_();
-    } else {
-      if (this->crypt_telegram_ == nullptr && !this->decryption_key_.empty()) {
-        ESP_LOGW(TAG, "Decryption key is set, but crypt_telegram_ buffer is "
-                      "null. Allocating now.");
-        this->crypt_telegram_ = new uint8_t[this->max_telegram_len_ + 1];
-        if (this->crypt_telegram_ == nullptr) {
-          ESP_LOGE(TAG, "Failed to allocate crypt_telegram_ buffer in loop! "
-                        "Disabling requests.");
-          this->stop_requesting_data_();
-          return;
-        }
-      }
-      if (this->crypt_telegram_ != nullptr) {
-        this->receive_encrypted_telegram_();
-      } else {
-        ESP_LOGE(TAG, "Decryption key set, but crypt_telegram_ buffer is still "
-                      "null. Skipping encrypted receive. Disabling requests.");
-        this->stop_requesting_data_();
-      }
-    }
+  if (this->telegram_ == nullptr || !this->ready_to_request_data_())
+    return;
+  if (this->has_decryption_key_) {
+    if (this->crypt_telegram_ != nullptr)
+      this->receive_encrypted_telegram_();
+  } else {
+    this->receive_telegram_();
   }
 }
-
-// ... (ready_to_request_data_, request_interval_reached_,
-// receive_timeout_reached_, available_within_timeout_,
-//      start_requesting_data_, stop_requesting_data_, reset_telegram_,
-//      receive_telegram_, receive_encrypted_telegram_ methods copied from
-//      ver3_dsmr_custom_dsmr_cpp as they are largely okay, with minor logging
-//      adjustments or checks if needed)
 
 bool Dsmr::ready_to_request_data_() {
   if (this->request_pin_ != nullptr) {
@@ -201,7 +145,7 @@ bool Dsmr::ready_to_request_data_() {
     }
     if (!this->requesting_data_) {
       uint32_t discarded_bytes = 0;
-      while (this->available()) {
+      while (this->available() && discarded_bytes < MAX_BYTES_PER_LOOP) {
         this->read();
         discarded_bytes++;
       }
@@ -233,56 +177,19 @@ bool Dsmr::receive_timeout_reached_() {
 }
 
 bool Dsmr::available_within_timeout_() {
+  // An empty UART queue is normal between bytes. Leave partial frames intact
+  // and let the next component loop continue reception without waiting here.
   if (this->available()) {
     this->last_read_time_ = millis();
     return true;
   }
-  if (!this->header_found_) {
-    if (this->receive_timeout_ > 0 &&
-        (millis() - this->last_request_time_ > this->receive_timeout_)) {
-      if (this->requesting_data_) {
-        ESP_LOGV(TAG,
-                 "Timeout waiting for telegram header (since last request: "
-                 "%ums > %ums).",
-                 (unsigned long)(millis() - this->last_request_time_),
-                 (unsigned long)this->receive_timeout_);
-      }
-      this->reset_telegram_();
-      this->stop_requesting_data_();
-      return false;
-    }
-    return false;
-  }
-  if (this->parent_->get_rx_buffer_size() < this->max_telegram_len_) {
-    uint32_t wait_entry_time = millis();
-    while (!this->receive_timeout_reached_()) {
-      yield();
-      if (this->available()) {
-        this->last_read_time_ = millis();
-        return true;
-      }
-      if (this->receive_timeout_ > 0 &&
-          (millis() - wait_entry_time > this->receive_timeout_ + 100))
-        break;
-      if (this->receive_timeout_ == 0 && (millis() - wait_entry_time > 2000))
-        break;
-    }
-  } else {
-    if (!this->receive_timeout_reached_()) {
-      delay(1);
-      if (this->available()) {
-        this->last_read_time_ = millis();
-        return true;
-      }
-    }
-  }
-  if (this->receive_timeout_reached_()) {
-    ESP_LOGW(TAG,
-             "Timeout while reading data for telegram (header_found_: %s, "
-             "bytes_read_: %zu, last_read_ago: %ums > %ums)",
-             YESNO(this->header_found_), this->bytes_read_,
-             (unsigned long)(millis() - this->last_read_time_),
-             (unsigned long)this->receive_timeout_);
+  const bool timed_out = this->header_found_
+      ? this->receive_timeout_reached_()
+      : (this->receive_timeout_ > 0 &&
+         millis() - this->last_request_time_ > this->receive_timeout_);
+  if (timed_out) {
+    ESP_LOGW(TAG, "Timeout receiving P1 telegram (header: %s, plain bytes: %zu, encrypted bytes: %zu).",
+             YESNO(this->header_found_), this->bytes_read_, this->crypt_bytes_read_);
     this->reset_telegram_();
     this->stop_requesting_data_();
   }
@@ -329,7 +236,8 @@ void Dsmr::reset_telegram_() {
 }
 
 void Dsmr::receive_telegram_() {
-  while (this->available_within_timeout_()) {
+  size_t processed = 0;
+  while (processed++ < MAX_BYTES_PER_LOOP && this->available_within_timeout_()) {
     const char c = static_cast<char>(this->read());
     if (!this->header_found_) {
       if (c == '/') {
@@ -349,22 +257,6 @@ void Dsmr::receive_telegram_() {
       this->reset_telegram_();
       this->stop_requesting_data_();
       return;
-    }
-    if (c == '(' && this->bytes_read_ > 0) {
-      size_t temp_bytes_read = this->bytes_read_;
-      while (temp_bytes_read > 0) {
-        char prev_char = this->telegram_[temp_bytes_read - 1];
-        if (prev_char == '\r' || prev_char == '\n') {
-          temp_bytes_read--;
-        } else {
-          break;
-        }
-      }
-      if (temp_bytes_read < this->bytes_read_) {
-        ESP_LOGVV(TAG, "Removed %zu CR/LF chars before '('.",
-                  this->bytes_read_ - temp_bytes_read);
-      }
-      this->bytes_read_ = temp_bytes_read;
     }
     this->telegram_[this->bytes_read_++] = c;
     if (c == '!') {
@@ -393,7 +285,8 @@ void Dsmr::receive_encrypted_telegram_() {
     this->stop_requesting_data_();
     return;
   }
-  while (this->available_within_timeout_()) {
+  size_t processed = 0;
+  while (processed++ < MAX_BYTES_PER_LOOP && this->available_within_timeout_()) {
     const uint8_t c_byte = static_cast<uint8_t>(this->read());
     if (!this->header_found_) {
       if (c_byte != 0xDB) {
@@ -573,14 +466,17 @@ Dsmr::parse_numeric_value_from_string(const std::string &value_str) {
       return {};
     }
   }
-  temp_val.erase(std::remove_if(temp_val.begin(), temp_val.end(), ::isspace),
+  temp_val.erase(std::remove_if(temp_val.begin(), temp_val.end(),
+                               [](unsigned char c) { return std::isspace(c); }),
                  temp_val.end());
   if (temp_val.empty()) {
     return {};
   }
   char *end_ptr = nullptr;
+  errno = 0;
   float val = std::strtof(temp_val.c_str(), &end_ptr);
-  if (end_ptr == temp_val.c_str() || (end_ptr != nullptr && *end_ptr != '\0')) {
+  if (end_ptr == temp_val.c_str() || *end_ptr != '\0' ||
+      errno == ERANGE || !std::isfinite(val)) {
     ESP_LOGVV(TAG_CUSTOM_SENSORS,
               "strtof failed for '%s'. end_ptr points to '%c' (0x%02X)",
               temp_val.c_str(), (end_ptr ? *end_ptr : '0'),
@@ -625,7 +521,8 @@ void Dsmr::process_line_for_custom_sensors(const char *line_buffer,
   std::string value_part_str = line_str.substr(
       open_paren_pos + 1, close_paren_pos - (open_paren_pos + 1));
   obis_code_str.erase(
-      std::remove_if(obis_code_str.begin(), obis_code_str.end(), ::isspace),
+      std::remove_if(obis_code_str.begin(), obis_code_str.end(),
+                     [](unsigned char c) { return std::isspace(c); }),
       obis_code_str.end());
 
   if (obis_code_str.empty()) {
@@ -638,8 +535,11 @@ void Dsmr::process_line_for_custom_sensors(const char *line_buffer,
             "Processing line for custom sensors: OBIS '%s', ValuePart '%s'",
             obis_code_str.c_str(), value_part_str.c_str());
 
+  ::dsmr::ObisId line_id;
+  const bool has_line_id = parse_custom_obis_id(obis_code_str, &line_id);
   for (auto &custom_def : this->custom_obis_definitions_) {
-    if (custom_def.obis_code_str == obis_code_str) {
+    if (custom_def.obis_code_str == obis_code_str ||
+        (has_line_id && custom_def.has_obis_id && custom_def.obis_id == line_id)) {
       if (custom_def.type == CustomObisSensorType::NUMERIC &&
           custom_def.numeric_sensor_ptr != nullptr) {
         optional<float> val_opt =
@@ -691,35 +591,52 @@ void Dsmr::process_line_for_custom_sensors(const char *line_buffer,
                    obis_code_str.c_str(), parsed_text.c_str());
         }
       }
-      break;
     }
   }
 }
 
-bool Dsmr::parse_telegram() {
-  MyData data_from_standard_parser;
-  ESP_LOGV(
-      TAG,
-      "Attempting to parse P1 telegram of %zu bytes using vendored parser.",
-      this->bytes_read_);
+void Dsmr::normalize_value_lines_() {
+  // Preserve the existing wrapped-value compatibility, after CRC validation.
+  size_t written = 0;
+  for (size_t read = 0; read < this->bytes_read_; ++read) {
+    const char c = this->telegram_[read];
+    if (c == '(') {
+      while (written > 0 && (this->telegram_[written - 1] == '\r' ||
+                             this->telegram_[written - 1] == '\n'))
+        --written;
+    }
+    this->telegram_[written++] = c;
+  }
+  this->bytes_read_ = written;
+  this->telegram_[written] = '\0';
+}
 
-  if (this->bytes_read_ < this->max_telegram_len_) {
-    this->telegram_[this->bytes_read_] = '\0';
-  } else {
-    this->telegram_[this->max_telegram_len_] = '\0';
-    ESP_LOGW(TAG,
-             "Telegram length at maximum buffer capacity (%zu). Ensure buffer "
-             "is sufficient.",
-             this->max_telegram_len_);
+bool Dsmr::parse_telegram() {
+  if (this->telegram_ == nullptr || this->bytes_read_ > this->max_telegram_len_)
+    return false;
+  this->telegram_[this->bytes_read_] = '\0';
+  // Raw diagnostics retain the exact wire frame, including rejected frames.
+  if (this->s_telegram_ != nullptr)
+    this->s_telegram_->publish_state(std::string(this->telegram_, this->bytes_read_));
+
+  const auto frame_result = ::dsmr::P1Parser::validate_telegram(
+      this->telegram_, this->bytes_read_, this->crc_check_);
+  if (frame_result.err_) {
+    const auto error = frame_result.fullError(this->telegram_, this->telegram_ + this->bytes_read_);
+    ESP_LOGW(TAG, "Rejected P1 frame: %s", error.c_str());
+    this->status_set_warning();
+    this->stop_requesting_data_();
+    return false;
   }
 
-  ::dsmr::ParseResult<void> standard_parse_result = ::dsmr::P1Parser::parse(
-      &data_from_standard_parser, this->telegram_, this->bytes_read_,
-      false /* unknown_error */, this->crc_check_);
+  this->normalize_value_lines_();
+  MyData data_from_standard_parser;
+  // CRC was already checked on the original bytes. Unsupported standard fields
+  // can fail independently without discarding valid custom OBIS measurements.
+  const auto standard_parse_result = ::dsmr::P1Parser::parse(
+      &data_from_standard_parser, this->telegram_, this->bytes_read_, false, false);
 
-  if (standard_parse_result
-          .err_) { // CORRECTED: Access err_ (from ver4_parser_lib_parser.h
-                   // via ver3_parser_lib_util.h)
+  if (standard_parse_result.err_) {
     auto err_str = standard_parse_result.fullError(
         this->telegram_, this->telegram_ + this->bytes_read_);
     ESP_LOGW(TAG, "DSMR P1 vendored parser error: %s", err_str.c_str());
@@ -733,9 +650,11 @@ bool Dsmr::parse_telegram() {
 
   ESP_LOGV(TAG, "Processing telegram for custom OBIS sensors line by line.");
   const char *current_line_start = this->telegram_;
-  const char *telegram_buffer_end = this->telegram_ + this->bytes_read_;
+  const char *telegram_buffer_end = static_cast<const char *>(
+      memchr(this->telegram_, '!', this->bytes_read_));
 
-  while (current_line_start < telegram_buffer_end &&
+  while (!this->custom_obis_definitions_.empty() &&
+         current_line_start < telegram_buffer_end &&
          *current_line_start != '\0') {
     const char *line_feed_pos = static_cast<const char *>(memchr(
         current_line_start, '\n', telegram_buffer_end - current_line_start));
@@ -769,7 +688,8 @@ bool Dsmr::parse_telegram() {
     }
     if (actual_line_end_char != nullptr) {
       current_line_start = actual_line_end_char + 1;
-      while (current_line_start < telegram_buffer_end &&
+      while (!this->custom_obis_definitions_.empty() &&
+         current_line_start < telegram_buffer_end &&
              (*current_line_start == '\r' || *current_line_start == '\n')) {
         current_line_start++;
       }
@@ -777,46 +697,22 @@ bool Dsmr::parse_telegram() {
       break;
     }
   }
-  if (this->s_telegram_ != nullptr) {
-    this->s_telegram_->publish_state(
-        std::string(this->telegram_, this->bytes_read_));
-    ESP_LOGV(TAG, "Published full telegram to s_telegram_ text_sensor.");
-  }
   this->stop_requesting_data_();
   return !standard_parse_result.err_; // CORRECTED: Access err_
 }
 
 void Dsmr::publish_sensors(MyData &data) {
-  ESP_LOGV(TAG, "Publishing states for standard DSMR sensors...");
-
-#define DSMR_PUBLISH_STANDARD_SENSOR(sensor_field_name)                        \
-  if (data.sensor_field_name##_present_ &&                                     \
-      this->s_##sensor_field_name##_ != nullptr) {                             \
-    this->s_##sensor_field_name##_->publish_state(data.sensor_field_name##_);  \
-    ESP_LOGD(TAG, "Published standard sensor '%s': %f", #sensor_field_name,    \
-             static_cast<float>(data.sensor_field_name##_));                   \
-  } else if (data.sensor_field_name##_present_ &&                              \
-             this->s_##sensor_field_name##_ == nullptr) {                      \
-    ESP_LOGV(TAG,                                                              \
-             "Standard sensor '%s' was parsed but is overridden by a custom "  \
-             "sensor. Not publishing.",                                        \
-             #sensor_field_name);                                              \
+#define DSMR_PUBLISH_STANDARD_SENSOR(s) \
+  if (data.s##_present_ && this->s_##s##_ != nullptr && \
+      !this->has_custom_sensor_for_(::dsmr::fields::s::id_)) { \
+    this->s_##s##_->publish_state(data.s##_); \
   }
   DSMR_CUSTOM_SENSOR_LIST(DSMR_PUBLISH_STANDARD_SENSOR, )
 
-#define DSMR_PUBLISH_STANDARD_TEXT_SENSOR(sensor_field_name)                   \
-  if (data.sensor_field_name##_present_ &&                                     \
-      this->s_##sensor_field_name##_ != nullptr) {                             \
-    this->s_##sensor_field_name##_->publish_state(                             \
-        data.sensor_field_name##_.c_str());                                    \
-    ESP_LOGD(TAG, "Published standard text_sensor '%s': %s",                   \
-             #sensor_field_name, data.sensor_field_name##_.c_str());           \
-  } else if (data.sensor_field_name##_present_ &&                              \
-             this->s_##sensor_field_name##_ == nullptr) {                      \
-    ESP_LOGV(TAG,                                                              \
-             "Standard text_sensor '%s' was parsed but is overridden by a "    \
-             "custom sensor. Not publishing.",                                 \
-             #sensor_field_name);                                              \
+#define DSMR_PUBLISH_STANDARD_TEXT_SENSOR(s) \
+  if (data.s##_present_ && this->s_##s##_ != nullptr && \
+      !this->has_custom_sensor_for_(::dsmr::fields::s::id_)) { \
+    this->s_##s##_->publish_state(data.s##_.c_str()); \
   }
   DSMR_CUSTOM_TEXT_SENSOR_LIST(DSMR_PUBLISH_STANDARD_TEXT_SENSOR, )
 }
@@ -840,20 +736,19 @@ void Dsmr::dump_config() {
       ESP_LOGCONFIG(TAG, "  Passive Read Interval: Continuous attempt");
     }
   }
-  if (!this->decryption_key_.empty()) {
+  if (this->has_decryption_key_) {
     ESP_LOGCONFIG(TAG, "  Decryption: Enabled (key is set)");
   } else {
     ESP_LOGCONFIG(TAG, "  Decryption: Disabled (no key set)");
   }
-  ESP_LOGCONFIG(TAG, "  Standard Sensors (pointers; null if overridden by "
-                     "custom or not configured):");
+  ESP_LOGCONFIG(TAG, "  Standard Sensors (matching custom OBIS sensors suppress publication):");
 #define DSMR_LOG_STANDARD_SENSOR_IMPL(s)                                       \
   if (this->s_##s##_ != nullptr) {                                             \
     LOG_SENSOR("    ", #s, this->s_##s##_);                                    \
   } else {                                                                     \
     ESP_LOGCONFIG(                                                             \
         TAG,                                                                   \
-        "    %s (numeric): Overridden by custom sensor or not configured.",    \
+        "    %s (numeric): Not configured.",    \
         #s);                                                                   \
   }
   DSMR_CUSTOM_SENSOR_LIST(DSMR_LOG_STANDARD_SENSOR_IMPL, )
@@ -862,7 +757,7 @@ void Dsmr::dump_config() {
     LOG_TEXT_SENSOR("    ", #s, this->s_##s##_);                               \
   } else {                                                                     \
     ESP_LOGCONFIG(                                                             \
-        TAG, "    %s (text): Overridden by custom sensor or not configured.",  \
+        TAG, "    %s (text): Not configured.",  \
         #s);                                                                   \
   }
   DSMR_CUSTOM_TEXT_SENSOR_LIST(DSMR_LOG_STANDARD_TEXT_SENSOR_IMPL, )
@@ -892,42 +787,38 @@ void Dsmr::dump_config() {
   }
 }
 
-void Dsmr::set_decryption_key(const std::string &decryption_key_hex) {
-  if (decryption_key_hex.empty()) {
-    ESP_LOGI(TAG, "Disabling DSMR telegram decryption (key cleared).");
-    this->decryption_key_.clear();
-    if (this->crypt_telegram_ != nullptr) {
-      delete[] this->crypt_telegram_;
-      this->crypt_telegram_ = nullptr;
-    }
-    return;
+bool Dsmr::set_decryption_key(const std::string &decryption_key_hex) {
+  uint8_t parsed_key[DSMR_AES128_KEY_SIZE] = {};
+  if (!decryption_key_hex.empty() && !parse_aes128_key(decryption_key_hex, parsed_key)) {
+    ESP_LOGE(TAG, "Decryption key must be exactly 32 hexadecimal characters; previous key retained.");
+    return false;
   }
-  uint8_t parsed_key[DSMR_AES128_KEY_SIZE];
-  if (!parse_aes128_key(decryption_key_hex, parsed_key)) {
-    ESP_LOGE(TAG,
-             "Error: Decryption key must be exactly 32 hexadecimal "
-             "characters. Decryption disabled.");
-    this->decryption_key_.clear();
-    if (this->crypt_telegram_ != nullptr) {
-      delete[] this->crypt_telegram_;
-      this->crypt_telegram_ = nullptr;
-    }
-    return;
-  }
-  this->decryption_key_.assign(parsed_key, parsed_key + DSMR_AES128_KEY_SIZE);
-  ESP_LOGI(TAG, "DSMR telegram decryption key is set.");
-  if (this->crypt_telegram_ == nullptr) {
-    this->crypt_telegram_ = new uint8_t[this->max_telegram_len_ + 1];
+  if (!decryption_key_hex.empty() && this->has_decryption_key_ &&
+      std::equal(parsed_key, parsed_key + DSMR_AES128_KEY_SIZE, this->decryption_key_.begin()))
+    return true;
+
+  // During code generation setup has not allocated the plain buffer yet.
+  // Runtime activation allocates before replacing a working mode or key.
+  if (!decryption_key_hex.empty() && this->telegram_ != nullptr && this->crypt_telegram_ == nullptr) {
+    this->crypt_telegram_ = new (std::nothrow) uint8_t[this->max_telegram_len_ + 1];
     if (this->crypt_telegram_ == nullptr) {
-      ESP_LOGE(TAG,
-               "Failed to allocate crypt_telegram_ buffer after setting key!");
-    } else {
-      ESP_LOGD(
-          TAG,
-          "Allocated crypt_telegram_ buffer (%zu bytes) for encrypted data.",
-          this->max_telegram_len_ + 1);
+      ESP_LOGE(TAG, "Failed to allocate encrypted telegram buffer; previous key retained.");
+      return false;
     }
   }
+  if (this->telegram_ != nullptr)
+    this->stop_requesting_data_();
+  this->reset_telegram_();
+  std::copy(parsed_key, parsed_key + DSMR_AES128_KEY_SIZE, this->decryption_key_.begin());
+  this->has_decryption_key_ = !decryption_key_hex.empty();
+  if (!this->has_decryption_key_) {
+    delete[] this->crypt_telegram_;
+    this->crypt_telegram_ = nullptr;
+    ESP_LOGI(TAG, "DSMR telegram decryption disabled (key cleared).");
+  } else {
+    ESP_LOGI(TAG, "DSMR telegram decryption key is set.");
+  }
+  return true;
 }
 
 void Dsmr::add_custom_numeric_sensor(const std::string &obis_code,
@@ -943,39 +834,9 @@ void Dsmr::add_custom_numeric_sensor(const std::string &obis_code,
            "Registering custom numeric sensor: OBIS '%s', Name '%s'",
            obis_code.c_str(), sens->get_name().c_str());
 
-  for (const auto &map_entry : this->standard_sensor_to_obis_map_) {
-    const std::string &standard_sensor_symbolic_name = map_entry.first;
-    const std::string &standard_sensor_obis_code = map_entry.second;
-    if (obis_code == standard_sensor_obis_code) {
-      auto it_ptr_map = this->standard_numeric_sensor_pointers_.find(
-          standard_sensor_symbolic_name);
-      if (it_ptr_map != this->standard_numeric_sensor_pointers_.end()) {
-        if (*(it_ptr_map->second) != nullptr) {
-          ESP_LOGI(TAG_CUSTOM_SENSORS,
-                   "Custom numeric sensor for OBIS '%s' (Name: '%s') overrides "
-                   "standard sensor '%s'. Standard sensor will be disabled.",
-                   obis_code.c_str(), sens->get_name().c_str(),
-                   standard_sensor_symbolic_name.c_str());
-          *(it_ptr_map->second) = nullptr;
-        } else {
-          ESP_LOGV(TAG_CUSTOM_SENSORS,
-                   "Standard numeric sensor '%s' (OBIS: %s) was already null "
-                   "(possibly overridden or not configured).",
-                   standard_sensor_symbolic_name.c_str(), obis_code.c_str());
-        }
-      } else {
-        ESP_LOGW(TAG_CUSTOM_SENSORS,
-                 "OBIS code '%s' matches standard sensor '%s', but its "
-                 "pointer-to-pointer was not found in "
-                 "standard_numeric_sensor_pointers_ map. Override might not "
-                 "work as expected.",
-                 obis_code.c_str(), standard_sensor_symbolic_name.c_str());
-      }
-      break;
-    }
-  }
   CustomObisSensorDefinition def;
   def.obis_code_str = obis_code;
+  def.has_obis_id = parse_custom_obis_id(obis_code, &def.obis_id);
   def.numeric_sensor_ptr = sens;
   def.text_sensor_ptr = nullptr;
   def.type = CustomObisSensorType::NUMERIC;
@@ -996,37 +857,9 @@ void Dsmr::add_custom_text_sensor(const std::string &obis_code,
   ESP_LOGD(TAG_CUSTOM_SENSORS,
            "Registering custom text sensor: OBIS '%s', Name '%s'",
            obis_code.c_str(), sens->get_name().c_str());
-  for (const auto &map_entry : this->standard_sensor_to_obis_map_) {
-    const std::string &standard_sensor_symbolic_name = map_entry.first;
-    const std::string &standard_sensor_obis_code = map_entry.second;
-    if (obis_code == standard_sensor_obis_code) {
-      auto it_ptr_map = this->standard_text_sensor_pointers_.find(
-          standard_sensor_symbolic_name);
-      if (it_ptr_map != this->standard_text_sensor_pointers_.end()) {
-        if (*(it_ptr_map->second) != nullptr) {
-          ESP_LOGI(TAG_CUSTOM_SENSORS,
-                   "Custom text sensor for OBIS '%s' (Name: '%s') overrides "
-                   "standard sensor '%s'. Standard sensor will be disabled.",
-                   obis_code.c_str(), sens->get_name().c_str(),
-                   standard_sensor_symbolic_name.c_str());
-          *(it_ptr_map->second) = nullptr;
-        } else {
-          ESP_LOGV(TAG_CUSTOM_SENSORS,
-                   "Standard text sensor '%s' (OBIS: %s) was already null.",
-                   standard_sensor_symbolic_name.c_str(), obis_code.c_str());
-        }
-      } else {
-        ESP_LOGW(TAG_CUSTOM_SENSORS,
-                 "OBIS code '%s' matches standard sensor '%s', but its "
-                 "pointer-to-pointer was not found in "
-                 "standard_text_sensor_pointers_ map.",
-                 obis_code.c_str(), standard_sensor_symbolic_name.c_str());
-      }
-      break;
-    }
-  }
   CustomObisSensorDefinition def;
   def.obis_code_str = obis_code;
+  def.has_obis_id = parse_custom_obis_id(obis_code, &def.obis_id);
   def.numeric_sensor_ptr = nullptr;
   def.text_sensor_ptr = sens;
   def.type = CustomObisSensorType::TEXT;

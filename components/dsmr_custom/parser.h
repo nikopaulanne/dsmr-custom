@@ -65,6 +65,9 @@ struct ParsedData;
 
 template <>
 struct ParsedData<> {
+  ParseResult<void> parse_line(const ObisId &id, const char *str, const char *end) {
+    return parse_line_inlined(id, str, end);
+  }
   ParseResult<void> __attribute__((__always_inline__))
   parse_line_inlined(const ObisId & /* id */, const char *str, const char * /* end */) {
     return ParseResult<void>().until(str);
@@ -205,15 +208,18 @@ struct CrcParser {
   static const size_t CRC_LEN = 4;
   static ParseResult<uint16_t> parse(const char *str, const char *end) {
     ParseResult<uint16_t> res;
-    if (str + CRC_LEN > end)
+    if (static_cast<size_t>(end - str) < CRC_LEN)
       return res.fail(F("Insufficient data for checksum"), str);
-    char buf[CRC_LEN + 1];
-    memcpy(buf, str, CRC_LEN);
-    buf[CRC_LEN] = '\0';
-    char *endp;
-    uint16_t check = static_cast<uint16_t>(std::strtoul(buf, &endp, 16));
-    if (endp != buf + CRC_LEN)
-      return res.fail(F("Malformed checksum string"), str);
+    uint16_t check = 0;
+    for (size_t i = 0; i < CRC_LEN; ++i) {
+      const char c = str[i];
+      uint16_t digit;
+      if (c >= '0' && c <= '9') digit = c - '0';
+      else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+      else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+      else return res.fail(F("Malformed checksum string"), str + i);
+      check = static_cast<uint16_t>((check << 4) | digit);
+    }
     // CORRECTED: Access next_ member
     res.next_ = str + CRC_LEN;
     return res.succeed(check);
@@ -221,14 +227,12 @@ struct CrcParser {
 };
 
 struct P1Parser {
-  template <typename... Ts>
-  static ParseResult<void> parse(ParsedData<Ts...> *data, const char *str, size_t n, bool unknown_error = false,
-                                   bool check_crc = true) {
+  // Validate the original wire bytes before interpreting fields or normalizing lines.
+  static ParseResult<void> validate_telegram(const char *str, size_t n, bool check_crc = true) {
     ParseResult<void> res;
     if (!n || str[0] != '/')
       return res.fail(F("Data should start with /"), str);
-    const char *data_start = str + 1;
-    const char *data_end_ptr = data_start;
+    const char *data_end_ptr = str + 1;
     if (check_crc) {
       uint16_t calculated_crc = _crc16_update(0, *str);
       while (data_end_ptr < str + n && *data_end_ptr != '!') {
@@ -258,6 +262,22 @@ struct P1Parser {
       // CORRECTED: Access next_ member
       res.next_ = data_end_ptr + 1;
     }
+    if (check_crc) {
+      for (const char *tail = res.next_; tail < str + n; ++tail) {
+        if (*tail != '\r' && *tail != '\n')
+          return res.fail(F("Unexpected data after checksum"), tail);
+      }
+    }
+    return res;
+  }
+
+  template <typename... Ts>
+  static ParseResult<void> parse(ParsedData<Ts...> *data, const char *str, size_t n, bool unknown_error = false,
+                                bool check_crc = true) {
+    ParseResult<void> res = validate_telegram(str, n, check_crc);
+    if (res.err_) return res;
+    const char *data_start = str + 1;
+    const char *data_end_ptr = static_cast<const char *>(memchr(str, '!', n));
     ParseResult<void> data_parse_res = parse_data(data, data_start, data_end_ptr, unknown_error);
     // CORRECTED: Access err_ member
     if (data_parse_res.err_) return data_parse_res;

@@ -11,6 +11,13 @@ def find_static_library(component_build_dir, library_name):
         if archive_name in files:
             matches.append(current_dir)
 
+    # ESP-IDF 5 can build both its component/port wrapper and the upstream
+    # TLS library as libmbedtls.a. The wrapper at the component root is already
+    # linked by ESP-IDF; this hook needs the upstream archive below it.
+    if library_name == "mbedtls" and len(matches) > 1:
+        matches = [path for path in matches
+                   if os.path.normpath(path) != os.path.normpath(component_build_dir)]
+
     if len(matches) > 1:
         raise RuntimeError(
             f"DSMR Custom: found multiple {archive_name} archives under "
@@ -73,7 +80,12 @@ def add_mbedtls_linker_flags(target, source, env):
     
     # CRITICAL: Library order matters for GNU linker!
     # Therefore: mbedtls -> mbedx509 -> crypto implementation (dependency last).
-    env.Append(LIBS=required_libraries)
+    # Link the selected archive files explicitly so a same-named ESP-IDF port
+    # wrapper on another LIBPATH cannot shadow the upstream TLS archive.
+    env.Append(LIBS=[
+        env.File(os.path.join(library_paths[name], f"lib{name}.a"))
+        for name in required_libraries
+    ])
     
     with open(debug_file, "a") as f:
         f.write(f"Added LIBPATH: {', '.join(library_dirs)}\n")

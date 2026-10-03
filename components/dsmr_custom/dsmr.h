@@ -54,7 +54,7 @@
     #include <vector>
     #include <string>
     #include <cmath>
-    #include <map>
+    #include <array>
 
     namespace esphome {
     namespace dsmr_custom {
@@ -65,9 +65,8 @@
     #define DSMR_CUSTOM_TEXT_SENSOR_LIST(F, SEP) F(identification)
     #endif
 
-    #if defined(DSMR_CUSTOM_SENSOR_LIST) && defined(DSMR_CUSTOM_TEXT_SENSOR_LIST)
-    #define DSMR_CUSTOM_BOTH ,
-    #else
+    // Code generation inserts a separator only when both field lists are nonempty.
+    #ifndef DSMR_CUSTOM_BOTH
     #define DSMR_CUSTOM_BOTH
     #endif
 
@@ -92,6 +91,8 @@
 
     struct CustomObisSensorDefinition {
       std::string obis_code_str;
+      ::dsmr::ObisId obis_id;
+      bool has_obis_id{false};
       esphome::sensor::Sensor *numeric_sensor_ptr{nullptr};
       esphome::text_sensor::TextSensor *text_sensor_ptr{nullptr};
       CustomObisSensorType type;
@@ -112,32 +113,18 @@
       bool parse_telegram();
       void publish_sensors(MyData &data);
 
-      void set_decryption_key(const std::string &decryption_key);
+      bool set_decryption_key(const std::string &decryption_key);
       void set_max_telegram_length(size_t length) { this->max_telegram_len_ = length; }
       void set_request_pin(GPIOPin *request_pin) { this->request_pin_ = request_pin; }
       void set_request_interval(uint32_t interval) { this->request_interval_ = interval; }
       void set_receive_timeout(uint32_t timeout) { this->receive_timeout_ = timeout; }
 
       #define DSMR_SET_STANDARD_SENSOR(s) \
-        void set_##s(sensor::Sensor *sensor) { \
-          s_##s##_ = sensor; \
-          if (sensor != nullptr) { \
-            this->standard_numeric_sensor_pointers_[#s] = &this->s_##s##_; \
-          } else { \
-            this->standard_numeric_sensor_pointers_.erase(#s); \
-          } \
-        }
+        void set_##s(sensor::Sensor *sensor) { s_##s##_ = sensor; }
       DSMR_CUSTOM_SENSOR_LIST(DSMR_SET_STANDARD_SENSOR, )
 
       #define DSMR_SET_STANDARD_TEXT_SENSOR(s) \
-        void set_##s(text_sensor::TextSensor *sensor) { \
-          s_##s##_ = sensor; \
-          if (sensor != nullptr) { \
-            this->standard_text_sensor_pointers_[#s] = &this->s_##s##_; \
-          } else { \
-            this->standard_text_sensor_pointers_.erase(#s); \
-          } \
-        }
+        void set_##s(text_sensor::TextSensor *sensor) { s_##s##_ = sensor; }
       DSMR_CUSTOM_TEXT_SENSOR_LIST(DSMR_SET_STANDARD_TEXT_SENSOR, )
 
       void set_telegram(text_sensor::TextSensor *sensor) { s_telegram_ = sensor; }
@@ -157,7 +144,8 @@
       optional<float> parse_numeric_value_from_string(const std::string &value_str);
       std::string parse_text_value_from_string(const std::string &value_str);
 
-      void initialize_standard_sensor_obis_map_();
+      bool has_custom_sensor_for_(const ::dsmr::ObisId &id) const;
+      void normalize_value_lines_();
 
       uint32_t request_interval_{0};
       GPIOPin *request_pin_{nullptr};
@@ -185,7 +173,8 @@
       #define DSMR_DECLARE_STANDARD_TEXT_SENSOR(s) text_sensor::TextSensor *s_##s##_{nullptr};
       DSMR_CUSTOM_TEXT_SENSOR_LIST(DSMR_DECLARE_STANDARD_TEXT_SENSOR, )
 
-      std::vector<uint8_t> decryption_key_{};
+      std::array<uint8_t, 16> decryption_key_{};
+      bool has_decryption_key_{false};
       bool crc_check_{true};
 
       std::vector<CustomObisSensorDefinition> custom_obis_definitions_;
@@ -194,9 +183,6 @@
       static constexpr uint32_t CUSTOM_SENSOR_MIN_PUBLISH_INTERVAL_MS = 5000;
       static constexpr float CUSTOM_SENSOR_FLOAT_TOLERANCE = 0.001f;
 
-      std::map<std::string, std::string> standard_sensor_to_obis_map_;
-      std::map<std::string, esphome::sensor::Sensor**> standard_numeric_sensor_pointers_;
-      std::map<std::string, esphome::text_sensor::TextSensor**> standard_text_sensor_pointers_;
     };
 
     }  // namespace dsmr_custom

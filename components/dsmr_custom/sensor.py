@@ -366,57 +366,8 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
-    """
-    Generates C++ code to register standard DSMR numeric sensors with the dsmr_custom hub
-    and defines preprocessor macros for the C++ layer to use with the vendored parser.
-    """
-    # Retrieve the already instantiated dsmr_custom hub object using its ID.
     hub = await cg.get_variable(config[CONF_DSMR_CUSTOM_HUB_ID])
-
-    # List to store the C++ names of enabled standard sensors for macro generation.
-    # These names typically correspond to the struct member names in the vendored
-    # parser's P1ParserReadout or MyData struct.
-    # The keys in CONFIG_SCHEMA (e.g., "energy_delivered_tariff1") are used here.
-    active_standard_sensors_for_macro = []
-
     for key, conf_item in config.items():
-        # Skip items that are not sensor configurations (e.g., the hub ID itself).
-        if not isinstance(conf_item, dict) or key == CONF_DSMR_CUSTOM_HUB_ID:
-            continue
-
-        # If a sensor configuration for 'key' is present in the YAML:
-        # 1. Create the C++ sensor object.
-        #    sensor.new_sensor() handles creating the Pvariable and basic setup.
-        #    The conf_item already contains the ID, name, etc. from sensor.sensor_schema().
-        s = await sensor.new_sensor(conf_item) # conf_item is the specific sensor's config dict
-
-        # 2. Register this standard sensor with the hub by calling its C++ setter method.
-        #    The setter method on the hub (e.g., hub.set_energy_delivered_tariff1(s))
-        #    is expected to match the 'key'.
-        #    This also populates the standard_numeric_sensor_pointers_ map in C++
-        #    which is used by the override mechanism.
-        cg.add(getattr(hub, f"set_{key}")(s))
-
-        # 3. Add the key (which is the symbolic name of the sensor) to the list
-        #    for C++ macro generation. The C++ macro will use these symbolic names.
-        active_standard_sensors_for_macro.append(f"F({key})")
-
-    # Generate the DSMR_CUSTOM_SENSOR_LIST C++ preprocessor macro.
-    # This macro is consumed by the C++ MyData struct (based on the vendored parser)
-    # and the publish_standard_sensors_() method in dsmr.cpp. It provides a list
-    # of symbolic field names for standard numeric sensors.
-    # Example: #define DSMR_CUSTOM_SENSOR_LIST(F, sep) F(energy_delivered_tariff1) sep F(power_delivered)
-    # DEVELOPER_NOTE_FOR_ESPHOME_DSMR_TEAM: This macro generation pattern allows
-    # the C++ parser (vendored matthijskooijman/arduino-dsmr based) to be templatized
-    # with the list of standard sensors defined here, similar to how the official
-    # ESPHome DSMR component handles its sensor lists via DSMR_SENSOR_LIST.
-    # This dsmr_custom component adapts that pattern for its standard sensors.
-    if active_standard_sensors_for_macro:
-        cg.add_define(
-            "DSMR_CUSTOM_SENSOR_LIST(F, sep)", # Macro signature expected by C++
-            cg.RawExpression(" sep ".join(active_standard_sensors_for_macro))
-        )
-    else:
-        # Define as empty if no standard numeric sensors are configured via this platform.
-        # This prevents compilation errors in C++ if the macro is used unconditionally.
-        cg.add_define("DSMR_CUSTOM_SENSOR_LIST(F, sep)", "")
+        if isinstance(conf_item, dict) and key != CONF_DSMR_CUSTOM_HUB_ID:
+            var = await sensor.new_sensor(conf_item)
+            cg.add(getattr(hub, f"set_{key}")(var))

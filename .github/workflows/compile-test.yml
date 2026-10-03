@@ -71,6 +71,10 @@ jobs:
             pip install "esphome==${{ matrix.esphome-version }}"
           fi
       
+      - name: Check configuration regressions
+        if: matrix.test-config == 'test-arduino-esp8266.yaml'
+        run: python tests/test_configuration.py
+
       - name: Compile ${{ matrix.test-config }}
         run: |
           esphome compile test-configs/${{ matrix.test-config }}

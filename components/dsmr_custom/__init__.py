@@ -35,15 +35,6 @@ from esphome.const import (
     CONF_ID,
     CONF_UART_ID,
     CONF_NAME,
-    CONF_ICON,
-    CONF_UNIT_OF_MEASUREMENT,
-    CONF_ACCURACY_DECIMALS,
-    CONF_DEVICE_CLASS,
-    CONF_STATE_CLASS,
-    CONF_DISABLED_BY_DEFAULT,
-    CONF_ENTITY_CATEGORY,
-    CONF_INTERNAL,
-    CONF_FORCE_UPDATE,
     CONF_PLATFORMIO_OPTIONS,
     CONF_RECEIVE_TIMEOUT,
 )
@@ -71,43 +62,49 @@ def _validate_key(value):
     value = cv.string_strict(value)
     if not value:
         return ""
-    parts = [value[i : i + 2] for i in range(0, len(value), 2)]
-    if len(parts) != 16:
-        raise cv.Invalid(
-            f"Decryption key must consist of 16 hexadecimal numbers (32 characters), got {len(value)} characters."
-        )
-    parts_int = []
-    if any(len(part) != 2 for part in parts):
-        raise cv.Invalid("Decryption key must be in format XXXXXX... (32 hex chars).")
-    for part in parts:
-        try:
-            parts_int.append(int(part, 16))
-        except ValueError:
-            raise cv.Invalid(
-                f"Decryption key must contain only hexadecimal characters (0-9, A-F)."
-            )
-    return "".join(f"{part:02X}" for part in parts_int)
+    if len(value) != 32 or any(char not in "0123456789abcdefABCDEF" for char in value):
+        raise cv.Invalid("Decryption key must be exactly 32 hexadecimal characters (0-9, A-F).")
+    return value.upper()
 
 
-CUSTOM_OBIS_SENSOR_SCHEMA = cv.Schema({
-    cv.Required(CONF_OBIS_CODE): cv.string_strict,
-    cv.Required(CONF_NAME): cv.string_strict,
-    cv.Required(CONF_SENSOR_TYPE): cv.enum({"sensor": "sensor", "text_sensor": "text_sensor"}, lower=True),
-    cv.Optional(CONF_UNIT_OF_MEASUREMENT): cv.string_strict,
-    cv.Optional(CONF_ACCURACY_DECIMALS): cv.positive_int,
-    cv.Optional(CONF_DEVICE_CLASS): cv.string_strict,
-    cv.Optional(CONF_STATE_CLASS): cv.enum(esphome_global_sensor.STATE_CLASSES, lower=True),
-    cv.Optional(CONF_ICON): cv.icon,
-    cv.Optional(CONF_FORCE_UPDATE, default=False): cv.boolean,
-    cv.Optional(CONF_DISABLED_BY_DEFAULT, default=False): cv.boolean,
-    cv.Optional(CONF_ENTITY_CATEGORY, default=""): cv.entity_category,
-    cv.Optional(CONF_INTERNAL, default=False): cv.boolean,
-})
+# Use the native schemas so IDs, filters and automations receive the same
+# validation and code generation as ordinary ESPHome sensors.
+CUSTOM_OBIS_SENSOR_SCHEMA = cv.typed_schema(
+    {
+        "sensor": esphome_global_sensor.sensor_schema().extend(
+            {cv.Required(CONF_OBIS_CODE): cv.string_strict, cv.Required(CONF_NAME): cv.string_strict}
+        ),
+        "text_sensor": esphome_global_text_sensor.text_sensor_schema().extend(
+            {cv.Required(CONF_OBIS_CODE): cv.string_strict, cv.Required(CONF_NAME): cv.string_strict}
+        ),
+    },
+    key=CONF_SENSOR_TYPE,
+    lower=True,
+)
+
+
+def _standard_fields(config, platform):
+    return sorted({
+        key
+        for block in config.get(platform, [])
+        if block.get("platform") == DOMAIN
+        for key, value in block.items()
+        if isinstance(value, dict) and key not in ("dsmr_custom_hub_id", "telegram")
+    })
+
+
+def _define_standard_fields(config):
+    numeric = _standard_fields(config, "sensor")
+    text = _standard_fields(config, "text_sensor")
+    for name, fields in (("DSMR_CUSTOM_SENSOR_LIST", numeric), ("DSMR_CUSTOM_TEXT_SENSOR_LIST", text)):
+        cg.add_define(f"{name}(F, sep)", cg.RawExpression(" sep ".join(f"F({field})" for field in fields)))
+    cg.add_define("DSMR_CUSTOM_BOTH", cg.RawExpression("," if numeric and text else ""))
+
 
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(Dsmr),
-        cv.Optional(CONF_MAX_TELEGRAM_LENGTH, default=1500): cv.positive_int,
+        cv.Optional(CONF_MAX_TELEGRAM_LENGTH, default=1500): cv.int_range(min=1, max=65535),
         cv.Optional(CONF_DECRYPTION_KEY): _sensitive(_validate_key),
         cv.Optional(CONF_REQUEST_PIN): pins.gpio_output_pin_schema,
         cv.Optional(CONF_REQUEST_INTERVAL, default="0s"): cv.positive_time_period_milliseconds,
@@ -132,6 +129,7 @@ async def to_code(config):
 
     # Platform-specific crypto library configuration
     from esphome.core import CORE
+    _define_standard_fields(CORE.config)
     if CORE.using_arduino:
         # Arduino: Use rweather/Crypto library
         cg.add_library("rweather/Crypto", "0.4.0")
@@ -165,54 +163,11 @@ async def to_code(config):
     cg.add_build_flag(f"-DDSMR_CUSTOM_GAS_MBUS_ID={config[CONF_GAS_MBUS_ID]}")
     cg.add_build_flag(f"-DDSMR_CUSTOM_WATER_MBUS_ID={config[CONF_WATER_MBUS_ID]}")
 
-    if CONF_CUSTOM_OBIS_SENSORS in config:
-        for i, conf_item in enumerate(config[CONF_CUSTOM_OBIS_SENSORS]):
-            obis_code = conf_item[CONF_OBIS_CODE]
-            sensor_name = conf_item[CONF_NAME]
-            sensor_type_str = conf_item[CONF_SENSOR_TYPE]
-            disabled_by_default = conf_item[CONF_DISABLED_BY_DEFAULT]
-            entity_category = conf_item[CONF_ENTITY_CATEGORY]
-            internal = conf_item[CONF_INTERNAL]
-
-            sanitized_obis = obis_code.replace(':', '_').replace('.', '_').replace('-', '_')
-            sensor_id_str = f"{config[CONF_ID].id}_custom_{sanitized_obis}_{i}"
-
-            if sensor_type_str == "sensor":
-                force_update = conf_item[CONF_FORCE_UPDATE]
-                sensor_id_obj = cv.declare_id(esphome_global_sensor.Sensor)(sensor_id_str)
-                sensor_config_payload = {
-                    CONF_ID: sensor_id_obj,
-                    CONF_NAME: sensor_name,
-                    CONF_DISABLED_BY_DEFAULT: disabled_by_default,
-                    CONF_ENTITY_CATEGORY: entity_category,
-                    CONF_INTERNAL: internal,
-                    CONF_FORCE_UPDATE: force_update,
-                }
-                if CONF_UNIT_OF_MEASUREMENT in conf_item:
-                    sensor_config_payload[CONF_UNIT_OF_MEASUREMENT] = conf_item[CONF_UNIT_OF_MEASUREMENT]
-                if CONF_ACCURACY_DECIMALS in conf_item:
-                    sensor_config_payload[CONF_ACCURACY_DECIMALS] = conf_item[CONF_ACCURACY_DECIMALS]
-                if CONF_DEVICE_CLASS in conf_item:
-                    sensor_config_payload[CONF_DEVICE_CLASS] = conf_item[CONF_DEVICE_CLASS]
-                if CONF_STATE_CLASS in conf_item:
-                    sensor_config_payload[CONF_STATE_CLASS] = conf_item[CONF_STATE_CLASS]
-                if CONF_ICON in conf_item:
-                    sensor_config_payload[CONF_ICON] = conf_item[CONF_ICON]
-
-                sens = await esphome_global_sensor.new_sensor(sensor_config_payload)
-                cg.add(var.add_custom_numeric_sensor(obis_code, sens))
-
-            elif sensor_type_str == "text_sensor":
-                sensor_id_obj = cv.declare_id(esphome_global_text_sensor.TextSensor)(sensor_id_str)
-                text_sensor_config_payload = {
-                    CONF_ID: sensor_id_obj,
-                    CONF_NAME: sensor_name,
-                    CONF_DISABLED_BY_DEFAULT: disabled_by_default,
-                    CONF_ENTITY_CATEGORY: entity_category,
-                    CONF_INTERNAL: internal,
-                }
-                if CONF_ICON in conf_item:
-                    text_sensor_config_payload[CONF_ICON] = conf_item[CONF_ICON]
-
-                text_sens = await esphome_global_text_sensor.new_text_sensor(text_sensor_config_payload)
-                cg.add(var.add_custom_text_sensor(obis_code, text_sens))
+    for conf_item in config.get(CONF_CUSTOM_OBIS_SENSORS, []):
+        obis_code = conf_item[CONF_OBIS_CODE]
+        if conf_item[CONF_SENSOR_TYPE] == "sensor":
+            sens = await esphome_global_sensor.new_sensor(conf_item)
+            cg.add(var.add_custom_numeric_sensor(obis_code, sens))
+        else:
+            sens = await esphome_global_text_sensor.new_text_sensor(conf_item)
+            cg.add(var.add_custom_text_sensor(obis_code, sens))

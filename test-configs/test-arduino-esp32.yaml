@@ -43,13 +43,40 @@ dsmr_custom:
   decryption_key: "00112233445566778899aabbccddeeff"
   max_telegram_length: 1700
   crc_check: true
+  custom_obis_sensors:
+    - code: "1-0:1.8.0*255"
+      type: sensor
+      id: custom_energy
+      name: "Synthetic Custom Energy"
+      device_class: energy
+      state_class: total_increasing
+      unit_of_measurement: kWh
+      accuracy_decimals: 3
+      filters:
+        - multiply: 1.0
+      on_value:
+        then:
+          - logger.log: "Synthetic custom energy updated"
+    - code: "1-0:1.8.0"
+      type: text_sensor
+      id: custom_energy_text
+      name: "Synthetic Custom Energy Text"
 
 text_sensor:
   - platform: dsmr_custom
     dsmr_custom_hub_id: dsmr_hub
-    identification:
-      name: "P1 Telegram Header"
+    telegram:
+      name: "Synthetic Full Telegram"
+      internal: true
 
 sensor:
   - platform: uptime
     name: "Uptime"
+  - platform: dsmr_custom
+    dsmr_custom_hub_id: dsmr_hub
+    energy_delivered_lux:
+      name: "Synthetic Standard Energy"
+  - platform: dsmr_custom
+    dsmr_custom_hub_id: dsmr_hub
+    power_delivered:
+      name: "Synthetic Standard Power"

@@ -2,9 +2,9 @@
 
 **Latest release:** v1.3.0
 
-**ESPHome Compatibility (current source):** ESPHome 2025.5.0 is the minimum build-tested release; CI also checks the current release.
+**ESPHome Compatibility (current source):** ESPHome 2025.5.0 is the minimum build-tested release. All four framework/board profiles also passed with ESPHome 2026.9.0 on 2026-10-02. The updated local component also passed a Slimmelezer D1 Mini build, OTA and unencrypted runtime smoke test with ESPHome 2026.9.1; CI checks the latest release weekly.
 
-**Home Assistant validation (current source):** Hardware smoke-tested with Home Assistant Core 2026.9.3 and ESPHome Device Builder 2026.9.0. Earlier Home Assistant releases are outside the current support target.
+**Home Assistant target:** Home Assistant Core 2026.9.3. Earlier Home Assistant releases are outside the current support target. The original Slimmelezer test used ESPHome Device Builder 2026.9.0; the repeat test on 2026-10-02 passed with 2026.9.1 after the latest parser and receive-loop fixes. The Home Assistant Core version was not recorded again for this repeat test.
 
 ## Framework Support
 
@@ -12,7 +12,7 @@ This component supports both Arduino and ESP-IDF frameworks with different featu
 
 ### Supported Frameworks
 
-- ✅ **Arduino Framework**: ESP8266 and ESP32 (both compile-tested). Live unencrypted P1 data was verified on a Slimmelezer running Arduino.
+- ✅ **Arduino Framework**: ESP8266 and ESP32 (both compile-tested). The updated local component was verified on a Slimmelezer D1 Mini (ESP8266 Arduino, ESPHome 2026.9.1) with unencrypted P1 data on 2026-10-02.
   - Encrypted telegram support remains experimental. It was previously reported working on a D1 Mini with v1.2.0, but has not been validated in the current hardware test.
 - ⚠️ **ESP-IDF Framework**: ESP32 and ESP32-C6 (compile-tested).
   - Encrypted telegram support remains experimental; there is no encrypted-meter hardware test. AES-GCM host tests pass, the ESP-IDF 5 ESP32/ESP32-C6 builds compile, and native and PlatformIO ESP-IDF 6.0.1 ESP32 builds compile and link. The PlatformIO build needs its generated bootloader linker script preprocessed once on a clean build.
@@ -62,7 +62,7 @@ This guide will get you running in minutes and show you the most stable way to d
 
 ### Step 1: Add the Component to your Configuration
 
-Instead of copying files manually, you can add this component directly to your device's `.yaml` file. Use the `v1.3.0` version tag for reproducible installs. Use `main` only when testing unreleased changes.
+Instead of copying files manually, you can add this component directly to your device's `.yaml` file. Use the `v1.3.0` version tag for reproducible installs. For unreleased changes, use a local component source or the specific development branch you intend to test.
 
 Add the following `external_components` block to your YAML:
 ```yaml
@@ -76,7 +76,7 @@ external_components:
 
 ### Step 2: Initial Test & Logging Configuration
 
-Use this minimal configuration first. Its only purpose is to safely view the raw data from your meter in the ESPHome logs without crashing the device.
+Use this minimal configuration to inspect received P1 telegrams in the ESPHome logs. The diagnostic text sensor is internal so full telegrams are not sent to Home Assistant entity states.
 
 ```yaml
 # Keep secrets.yaml local and never commit it; this repo ignores secrets.yaml.
@@ -124,13 +124,15 @@ external_components:
 dsmr_custom:
   id: dsmr_hub
   uart_id: uart_bus
+  max_telegram_length: 1700 # Match the expected complete frame size
+  crc_check: true
 
 # --- Sensors for Logging & Diagnostics Only ---
 text_sensor:
   - platform: dsmr_custom
     dsmr_custom_hub_id: dsmr_hub
     
-    # This sensor helps confirm a connection to the meter
+    # This sensor publishes the header of a successfully parsed telegram
     identification:
       name: "P1 Telegram Header"
       
@@ -153,14 +155,14 @@ text_sensor:
 2.  Open **ESPHome Device Builder** in Home Assistant.
 3.  Select `dsmr-diagnostics` and open its logs.
 4.  Wait for the device to connect and receive a data packet from your meter.
-5.  You will see a clearly marked block of text appear in the logs, starting with `--- FULL TELEGRAM RECEIVED ---`. This is the complete, raw data packet from your meter.
+5.  You will see a clearly marked block of text appear in the logs, starting with `--- FULL TELEGRAM RECEIVED ---`. This is the received frame before value-line normalization. Complete frames with a bad checksum can also appear here; check for parser warnings before treating the data as valid.
 6.  Copy the block locally to identify the OBIS codes your meter provides. Treat raw telegrams as private; remove meter identifiers and live readings before sharing them publicly.
 
 ### Step 4: Configure Your Final Sensors
 
 Now that you have your list of OBIS codes, you can create your final, permanent configuration. Modify your YAML file, remove the diagnostic `on_value` trigger, and add the sensors you want using the `custom_obis_sensors` list.
 
-See the `slimmelezer-example.yaml` file for a detailed example.
+See [slimmelezer-example.yaml](slimmelezer-example.yaml) for a detailed example.
 
 ```yaml
 dsmr_custom:
@@ -188,7 +190,7 @@ dsmr_custom:
     * **`DEFINE_FIELD` Macro Fix:** Resolves a C++ compilation error found in some versions of the underlying parser.
     * **Configurable M-Bus Channel IDs:** Allows M-Bus channel IDs for gas/water meters to be configured via YAML.
 * **Standard DSMR Sensor Support:** Option to define common sensors (energy, power, etc.) via standard `sensor:` and `text_sensor:` platforms.
-* **Sensor Override Mechanism:** A custom OBIS sensor will always take precedence over a standard sensor if they target the same OBIS code, preventing duplicate entities.
+* **Sensor Override Mechanism:** Custom OBIS definitions suppress matching standard sensor publications, regardless of registration order. Remove the corresponding standard sensor from your YAML if you do not want its unused entity registered in Home Assistant. Multiple custom sensors can share one OBIS code, including a numeric sensor and its raw text value.
 * **Encrypted Telegram Support (Experimental):** Supports AES-128 GCM encrypted P1 telegrams (e.g., for Luxembourg meters). Arduino decryption was reported working on a D1 Mini with v1.2.0; ESP-IDF has compile verification but needs field reports from users with encrypted meters. Other meter and board combinations remain unverified.
 * **`request_pin` Support:** Allows active data requests by controlling the P1 port's Data Request (RTS) pin.
 
@@ -200,18 +202,26 @@ This block configures the main P1 port interface. All parameters from the exampl
 
 ```yaml
 dsmr_custom:
-  id: dsmr_hub # Required. This ID is used to link sensors to this hub.
+  id: dsmr_hub # Explicit ID used to link standard sensors and lambdas to this hub.
   uart_id: uart_bus # Required. The ID of the UART bus connected to the P1 port.
-  max_telegram_length: 1700 # Optional, default: 1500. Max bytes for a telegram.
-  receive_timeout: "600ms"  # Optional, default: "200ms". Timeout for receiving data.
+  max_telegram_length: 1700 # Optional, default: 1500; allowed: 1-65535 bytes.
+  receive_timeout: "600ms"  # Optional, default: "200ms". Receive inactivity timeout; 0s disables it.
   crc_check: true           # Optional, default: true. Perform CRC check on telegrams.
   decryption_key: !secret dsmr_decryption_key # Optional; keep the key in secrets.yaml.
   # Note: See docs/aes-gcm-implementation-notes.md for technical details on ESP-IDF encryption support
   request_pin: D5           # Optional. GPIO pin for Data Request (RTS). E.g., D5.
-  request_interval: "10s"   # Optional, default: "0s". Interval for active data requests.
+  request_interval: "10s"   # Optional, default: "0s". Interval between request/read attempts.
   gas_mbus_id: 1            # Optional, default: 1. M-Bus channel ID for standard gas meter.
   water_mbus_id: 2          # Optional, default: 2. M-Bus channel ID for standard water meter.
 ```
+
+With `crc_check: true`, an invalid or missing checksum prevents both standard and custom measurements from being published. The `telegram` text sensor publishes complete plaintext P1 frames before normalization, including frames rejected by CRC validation. For encrypted input, this is the decrypted P1 frame after successful authentication; authentication failures do not publish plaintext. Oversized or timed-out partial frames are discarded with a log message and are not published to this sensor. Custom values can still be published when a valid frame contains fields that the standard parser cannot interpret.
+
+Reception continues across ESPHome loop calls instead of waiting for the rest of a telegram. `max_telegram_length` limits the complete input frame, including the header/checksum and, for encrypted input, the encrypted framing and authentication tag. The upper limit is a validation bound; the available device memory determines practical sizes. The UART RX buffer is separate and does not have to hold a whole telegram, but must accommodate incoming data between loop calls.
+
+The receive timeout applies while waiting for the header and between received bytes. With no request pin and the default `request_interval: 0s`, reception is continuous. Keep `crc_check: true` for checksum-protected meters; `false` explicitly disables checksum validation.
+
+A decryption key must contain exactly 32 ASCII hexadecimal characters (16 bytes), without spaces or prefixes. Omit the key or use an empty string for unencrypted input. The example's `set_dsmr_key` service preserves the current and stored key on invalid input; an empty string clears it. Accepted key/mode changes discard the partial frame. See [AES-GCM notes](docs/aes-gcm-implementation-notes.md) for storage and experimental encryption details.
 
 #### User-Defined OBIS Sensors (`custom_obis_sensors:`)
 
@@ -225,13 +235,40 @@ dsmr_custom:
     - code: "1-0:1.8.0"  # The OBIS code string from your meter's telegram
       name: "My Custom Total Energy Import"
       type: sensor      # "sensor" for numeric, "text_sensor" for text
-      # All standard ESPHome sensor parameters are supported:
+      id: custom_total_energy # Optional ID for filters, automations and lambdas
+      # Standard parameters for the selected sensor type are supported:
       unit_of_measurement: "kWh"
       accuracy_decimals: 3
       device_class: energy
       state_class: total_increasing
       icon: "mdi:home-import-outline"
+    - code: "1-0:1.8.0"
+      name: "Raw Total Energy Import"
+      type: text_sensor
+      id: raw_total_energy
 ```
+
+Custom sensors use the native ESPHome numeric or text sensor schema, including `id`, `filters`, and `on_value`. Use properties appropriate to the selected type; numeric properties such as `accuracy_decimals` do not apply to text sensors. Numeric values must be finite and within the parser's floating-point range. Units in the telegram are stripped when parsing a number; set the unit metadata and any conversion filter to match your meter.
+
+Multiple parenthesized fields remain available as one text value. For example, `(240101000000W)(001.234*m3)` becomes `240101000000W)(001.234*m3`; split it in a Home Assistant template if needed. This release does not add multi-value numeric parsing.
+
+For custom numeric sensors, changes greater than `0.001` in the parsed value publish immediately. Text changes publish immediately. Otherwise the next matching telegram after five seconds can publish again. ESPHome filters run after this component-level change detection, so they can further change or suppress published values.
+
+### Updating to v1.3.0
+
+- Keep existing sensor names and explicit IDs when updating, then check the
+  corresponding Home Assistant entities and Energy dashboard sources.
+- Remove a standard sensor from YAML if a custom definition for the same OBIS
+  code replaces it. The override suppresses values but does not unregister the
+  standard entity. Configured M-Bus channel IDs are honored.
+- Invalid checksums now block custom measurements too. If sensors stop updating,
+  inspect warnings, the diagnostic telegram, wiring and buffer sizes before
+  changing CRC settings.
+- Repeated standard platform blocks and custom numeric/text sensors sharing one
+  code are supported. Check custom properties against their native sensor type.
+- Use the local OTA and live sensor procedure in [TESTING.md](TESTING.md)
+  when updating your device. The repeat test passed on the local Slimmelezer D1
+  Mini on 2026-10-02; encryption remains experimental.
 
 ### Vendored Parser & Modifications
 

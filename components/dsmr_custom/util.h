@@ -94,10 +94,7 @@ static void concat_hack(String& s, const char *append, size_t n) {
   if (n == 0) return;
   
   #ifdef USE_ARDUINO
-    char buf[n + 1];
-    memcpy(buf, append, n);
-    buf[n] = '\0';
-    s.concat(buf);
+    s.concat(append, static_cast<unsigned int>(n));
   #else
     // ESP-IDF std::string uses append
     s.append(append, n);

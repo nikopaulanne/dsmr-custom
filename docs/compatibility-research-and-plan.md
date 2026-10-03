@@ -1,6 +1,7 @@
 # dsmr-custom: compatibility research and repair plan
 
 **Prepared:** 2026-09-27
+**Updated:** 2026-10-02
 **Release target:** `v1.3.0`
 **Research baseline:** `main`, `v1.2.0-2-g7a873e8` (when this research began)
 **Purpose:** plan compatibility work for current and future ESPHome/Home Assistant releases while preserving Nordic P1/SESKO support.
@@ -30,20 +31,20 @@ The repository's example configuration and Home Assistant entities show active u
 
 ## Current implementation status
 
-- **Compatibility baseline: complete.** The declared minimum (ESPHome 2025.5.0) and current release compile on ESP8266 Arduino, ESP32 Arduino, ESP32 ESP-IDF, and ESP32-C6 ESP-IDF. The local Slimmelezer smoke test also passed on Home Assistant Core 2026.9.3 and ESPHome Device Builder 2026.9.0.
+- **Compatibility baseline: complete.** The declared minimum (ESPHome 2025.5.0) and current release compile on ESP8266 Arduino, ESP32 Arduino, ESP32 ESP-IDF, and ESP32-C6 ESP-IDF. The original Slimmelezer smoke test used Home Assistant Core 2026.9.3 and ESPHome Device Builder 2026.9.0. The repeat test with the latest local fixes passed on a Slimmelezer D1 Mini with ESPHome 2026.9.1 on 2026-10-02; the maintainer confirmed build, upload and unencrypted operation. The Home Assistant Core version was not recorded again.
 - **Issue #10 decision: complete.** The issue is closed without a component change; value splitting belongs in the user's Home Assistant configuration.
 - **Crypto verification: partial.** Key/frame helpers, a host AES-GCM known-answer vector, and framework compile paths are checked. Encrypted-meter operation remains experimental and has not been independently verified on hardware.
-- **Parser fixture suite: pending.** Existing CI compiles the parser, but sanitized Nordic and ordinary DSMR telegram fixtures and malformed-frame boundary tests still need to be added.
+- **Parser/publication regressions: added.** Synthetic host cases now exercise production parsing, CRC rejection, wrapped values, standard/custom overrides, repeated OBIS definitions, M-Bus IDs, boundaries, timeouts and runtime key changes. Broader sanitized real-meter fixtures remain follow-up work.
 - **ESP-IDF 6 build verification: complete for both tested toolchains.** The PSA implementation compiled and linked with ESPHome 2026.9.0's native ESP-IDF 6.0.1 ESP32 toolchain. The PlatformIO IDF 6.0.1 build also passed after manually running the generated `bootloader_ld_in_preprocess` Ninja target; the full firmware link then exercised `post_build.py` and selected `tfpsacrypto`. The archive lookup still depends on generated build-tree layout.
 - **Issue #13: pending evidence.** GAMA 350 support needs a sanitized, reproducible frame fixture before implementation changes.
 
 ## Findings from the code review
 
 1. The custom parser's key capability is line-by-line OBIS matching from `custom_obis_sensors`, so users can define codes that do not exist in ESPHome's fixed DSMR schema.
-2. The current value parser expects one parenthesized value and parses numeric values with `strtof`. It cannot correctly represent an OBIS line with multiple parenthesized fields and units as reported in #10.
+2. The current value parser expects one parenthesized value and parses numeric values with `strtof`. The numeric path rejects combined timestamp/measurement values such as #10; the text path retains the inner `)(` separator so Home Assistant can split them.
 3. The lenient identification-line handling is intentional for Nordic meters. Do not tighten it to the Dutch DSMR identification grammar without captured Nordic regression fixtures.
-4. ESP32 review found no confirmed UART buffer overwrite from the inspected paths, but the configured telegram length, terminator byte, vector/string allocations, and long frames should get explicit boundary and memory tests.
-5. ESP-IDF crypto integration has two separate compatibility concerns. `post_build.py` discovers Mbed TLS archives under PlatformIO's generated component build tree and selects `mbedcrypto` on IDF 5 or `tfpsacrypto` on IDF 6, but still depends on that build-tree layout. IDF 6+ uses PSA Crypto for AES-GCM, avoiding the legacy Mbed TLS cipher-ID dependency. The PSA branch passes host tests and an ESPHome 2026.9.0 native-toolchain ESP32 build against IDF 6.0.1. The PlatformIO build also passed after manually running the generated `bootloader_ld_in_preprocess` target; its initial failure was in generated bootloader-script preprocessing before the component hook. Espressif documents PSA as the primary cryptography interface in its [ESP-IDF 6 migration guide](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/migration-guides/release-6.x/6.0/security.html), and the [PSA AEAD API](https://arm-software.github.io/psa-api/crypto/1.1/api/ops/aead.html) defines the authenticated decrypt call used here.
+4. The follow-up review found CRC bypass in custom publication, registration-order-dependent overrides, conflicting/empty field macros and permissive key validation. These are now corrected with production-code host and source-generation regressions. Reception is incremental; buffer allocation failures are handled and the Arduino helper no longer copies telegram-sized data to a temporary stack array.
+5. ESP-IDF crypto integration has two separate compatibility concerns. `post_build.py` discovers Mbed TLS archives under PlatformIO's generated component build tree and selects `mbedcrypto` on IDF 5 or `tfpsacrypto` on IDF 6. It selects the upstream TLS archive when IDF 5 also provides a same-named port wrapper and links the archive explicitly; discovery still depends on that build-tree layout. IDF 6+ uses PSA Crypto for AES-GCM, avoiding the legacy Mbed TLS cipher-ID dependency. The PSA branch passes host tests and an ESPHome 2026.9.0 native-toolchain ESP32 build against IDF 6.0.1. The PlatformIO build also passed after manually running the generated `bootloader_ld_in_preprocess` target; its initial failure was in generated bootloader-script preprocessing before the component hook. Espressif documents PSA as the primary cryptography interface in its [ESP-IDF 6 migration guide](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/migration-guides/release-6.x/6.0/security.html), and the [PSA AEAD API](https://arm-software.github.io/psa-api/crypto/1.1/api/ops/aead.html) defines the authenticated decrypt call used here.
 6. The supplied `slimmelezer` YAML logs only fixed status messages when the runtime key is applied or updated; it does not log the key value. It does persist the API-provided key in an ESPHome global with `restore_value: true`, and the example does not configure encryption at rest. Keep this storage behavior clear in the example and never log key material.
 
 ## Repair plan
@@ -55,12 +56,12 @@ The repository's example configuration and Home Assistant entities show active u
 - The matrix covers ESP8266 Arduino, ESP32 Arduino, ESP32 ESP-IDF, and ESP32-C6 ESP-IDF. A scheduled development/nightly job remains a possible follow-up.
 - Local configuration validation and full builds passed for the same four targets on the minimum and current versions.
 
-### Phase 2 — Make parser behavior fixture-driven (incomplete)
+### Phase 2 — Make parser behavior fixture-driven (synthetic regressions added)
 
 - Add sanitized telegram fixtures for at least one Finnish/Nordic meter, one ordinary DSMR meter, and a header variation. Store no keys or personally identifying meter data.
 - Extract parser decisions into host-testable helpers where feasible: identification line, OBIS extraction, parenthesis/token parsing, number plus unit parsing, CRC boundary, and malformed/truncated frame handling.
-- Add boundary cases for empty lines, CRLF/LF, missing footer, bad CRC, exact maximum frame length, one byte over the limit, and repeated telegrams.
-- Keep arbitrary configured OBIS mapping and standard sensor mapping behavior covered, including override behavior and text sensors.
+- Host regressions cover missing/malformed CRC, missing footer, wrapped CRLF values, exact maximum frame length, oversized frames, partial reception, timeouts and repeated telegrams. Broaden these with sanitized meter fixtures.
+- Host regressions cover custom/standard overrides in both registration orders, configurable M-Bus channels, multiple sensors per OBIS code and multi-value text. Source-generation tests cover native custom sensor properties, empty field lists and repeated standard platform blocks.
 
 ### Phase 3 — Keep multi-value conversion in Home Assistant (#10, complete)
 
@@ -68,13 +69,13 @@ The repository's example configuration and Home Assistant entities show active u
 - Users who need separate values can configure the OBIS code as a `text_sensor` and split its text in a Home Assistant template sensor. The current text path preserves the inner `)(` separator for this example.
 - Issue #10 is closed without an additional comment; treat the template as user-owned Home Assistant configuration, not a beta component feature.
 
-### Phase 4 — Make ESP32 and crypto support sustainable (in progress)
+### Phase 4 — Make ESP32 and crypto support sustainable (code checks complete; field feedback pending)
 
 - Continue the existing experimental-release practice: invite users to test encrypted telegrams on their own meters and report the exact board, framework, meter family, and result. The maintainer has no hardware that receives encrypted meter telegrams.
 - Replace assumptions about PlatformIO's private MbedTLS directory layout with ESP-IDF-supported dependency/link configuration. If that is not possible for the supported ESPHome toolchain, isolate the linking shim and fail with a clear diagnostic.
 - Retain the ESP-IDF hardware AES-GCM path for IDF 5 and use PSA AEAD for IDF 6+. Native ESPHome 2026.9.0 / IDF 6.0.1 ESP32 compile and link passed. PlatformIO IDF 6.0.1 also passed after manually running `bootloader_ld_in_preprocess`; prefer native ESP-IDF, and track the clean-build preprocessing gap as an upstream build-tool issue.
-- Verify decryption and authentication failure handling using published AES-GCM test vectors and synthetic test keys, plus compile checks for each ESP32 framework target. Do not claim encrypted-meter field testing: there is no hardware available that receives encrypted meter telegrams.
-- Test buffer limits, allocation paths, and parser behavior against representative test data. Mark ESP32 encrypted-meter operation as compile/test-vector verified but field-unverified until a user can test it with a real encrypted meter.
+- Decryption/authentication checks pass with a published AES-GCM vector, synthetic receive frames and tampered tags; each ESP32 framework target compiles. Encrypted-meter operation still needs user field reports.
+- Synthetic regressions cover buffer boundaries, allocation failures, parser publication decisions and key/mode changes. Broader real-meter fixtures and physical ESP32 encrypted-meter testing remain follow-up work.
 - Keep the ESP8266 build as a supported, separately tested profile; do not let ESP32-specific crypto headers leak into Arduino ESP8266 builds.
 
 ### Phase 5 — Investigate ELGAMA GAMA 350 (#13) separately (waiting for a fixture)
@@ -89,12 +90,13 @@ The repository's example configuration and Home Assistant entities show active u
 - Keep examples free of key values in logs, show secrets-backed configuration for compile-time keys, and document that the runtime-key example persists its key in ESPHome preferences without configuring encryption at rest.
 - Correct compatibility claims and separate compile-tested support from runtime-tested support.
 - Explain the native ESPHome component boundary: built-in `dsmr` is not a replacement for Nordic P1 OBIS definitions; `dlms_meter` parses DLMS/COSEM and does not consume these ASCII P1 telegrams.
-- Add migration notes for entity identity, encryption, `custom_obis_sensors`, and raw telegram diagnostics.
-- Release only after the version matrix and fixture suite pass; publish any ESP-IDF experimental status precisely.
+- README migration notes cover entity names/IDs, overridden standard entities, stricter CRC/key handling, native custom sensor properties and raw telegram diagnostics. TESTING.md includes the local Slimmelezer repeat-test procedure.
+- The version matrix, synthetic regression suite and local Slimmelezer D1 Mini repeat test pass. Check installation from the release tag once it exists; broader sanitized real-meter fixtures remain follow-up work. Keep encrypted-meter operation experimental.
 
 ## Acceptance criteria
 
-- Existing Finnish/Nordic fixture produces the same configured entities and values as the current release for supported single-value records.
+- Local hardware smoke test: passed on the existing Slimmelezer D1 Mini with ESPHome 2026.9.1 and unencrypted input, as confirmed by the maintainer. Installation from the release tag is still pending.
+- Follow-up fixture coverage: add sanitized Finnish/Nordic and ordinary DSMR fixtures and compare configured values; this broader real-meter corpus is not yet present.
 - Issue #10 requires no component change; multi-value splitting is left to Home Assistant configuration.
 - ESP8266 Arduino, ESP32 Arduino, ESP32 ESP-IDF, and ESP32-C6 ESP-IDF compile on the declared supported versions; native and PlatformIO ESP-IDF 6.0.1 ESP32 compile and link pass. The PlatformIO path needs the generated bootloader linker script preprocessed on a clean build.
 - AES-GCM implementation passes published test vectors and synthetic-key tamper/failure cases; encrypted-meter behavior on physical hardware remains explicitly field-unverified.
