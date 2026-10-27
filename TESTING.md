@@ -167,6 +167,7 @@ and current sensors. Consecutive telegrams showed changing live power values.
 This check used Home Assistant Core 2026.9.3 and ESPHome Device Builder
 2026.9.0. Earlier Home Assistant releases are outside the current support
 target. The meter stream was unencrypted, so this does not validate decryption.
+
 ### Repeat test on 2026-10-02 — passed
 
 After the parser/publication and receive-loop fixes, the maintainer repeated
@@ -187,6 +188,14 @@ package prefetch. ESPHome fell back to serial downloading for the unresolved
 package, and the build completed successfully. This was a package-cache warning
 rather than a component compilation failure. The OTA transport was encrypted;
 the P1 meter data in this test was unencrypted.
+
+### Follow-up on 2026-10-27
+
+The maintainer reconfirmed that the local component was working correctly on
+his D1 Mini. This is additional confirmation of the existing unencrypted
+installation; no new ESPHome/Home Assistant version or measured uptime was
+reported. Installation from the published `v1.3.0` tag remains a separate
+release-distribution check.
 
 ### Procedure for local Slimmelezer checks
 
