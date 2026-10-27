@@ -1,0 +1,82 @@
+substitutions:
+  device_name: test-arduino-esp32
+
+esphome:
+  name: ${device_name}
+  name_add_mac_suffix: false
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+wifi:
+  ssid: "test"
+  password: "test12345678"
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
+
+ota:
+  platform: esphome
+
+uart:
+  id: uart_bus
+  baud_rate: 115200
+  rx_pin: GPIO16
+  rx_buffer_size: 1700
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [ dsmr_custom ]
+    refresh: 0s
+
+dsmr_custom:
+  id: dsmr_hub
+  uart_id: uart_bus
+  decryption_key: "00112233445566778899aabbccddeeff"
+  max_telegram_length: 1700
+  crc_check: true
+  custom_obis_sensors:
+    - code: "1-0:1.8.0*255"
+      type: sensor
+      id: custom_energy
+      name: "Synthetic Custom Energy"
+      device_class: energy
+      state_class: total_increasing
+      unit_of_measurement: kWh
+      accuracy_decimals: 3
+      filters:
+        - multiply: 1.0
+      on_value:
+        then:
+          - logger.log: "Synthetic custom energy updated"
+    - code: "1-0:1.8.0"
+      type: text_sensor
+      id: custom_energy_text
+      name: "Synthetic Custom Energy Text"
+
+text_sensor:
+  - platform: dsmr_custom
+    dsmr_custom_hub_id: dsmr_hub
+    telegram:
+      name: "Synthetic Full Telegram"
+      internal: true
+
+sensor:
+  - platform: uptime
+    name: "Uptime"
+  - platform: dsmr_custom
+    dsmr_custom_hub_id: dsmr_hub
+    energy_delivered_lux:
+      name: "Synthetic Standard Energy"
+  - platform: dsmr_custom
+    dsmr_custom_hub_id: dsmr_hub
+    power_delivered:
+      name: "Synthetic Standard Power"

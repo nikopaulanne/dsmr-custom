@@ -2,7 +2,6 @@
  * NOTE: This is a vendored and modified version of a file from the
  * glmnet/Dsmr project. The original license is preserved below.
  *
- * Modifications are Copyright (c) 2025 (Niko Paulanne).
  * These modifications are licensed under the GPLv3, as part of the
  * dsmr_custom ESPHome component.
  *
@@ -47,7 +46,6 @@
  * @details Provides ObisId, ParseResult, and other helpers. This version has been
  * modified for dsmr_custom to use trailing underscores for member variables for
  * ESPHome C++ style compliance.
- * @author Niko Paulanne
  */
 
 // BEGIN MODIFICATION FOR ESPHOME DSMR_CUSTOM
@@ -96,10 +94,7 @@ static void concat_hack(String& s, const char *append, size_t n) {
   if (n == 0) return;
   
   #ifdef USE_ARDUINO
-    char buf[n + 1];
-    memcpy(buf, append, n);
-    buf[n] = '\0';
-    s.concat(buf);
+    s.concat(append, static_cast<unsigned int>(n));
   #else
     // ESP-IDF std::string uses append
     s.append(append, n);

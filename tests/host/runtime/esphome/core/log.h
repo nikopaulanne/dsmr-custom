@@ -1,0 +1,11 @@
+#pragma once
+#define ESP_LOGE(...)
+#define ESP_LOGW(...)
+#define ESP_LOGI(...)
+#define ESP_LOGD(...)
+#define ESP_LOGV(...)
+#define ESP_LOGVV(...)
+#define ESP_LOGCONFIG(...)
+#define LOG_PIN(...)
+#define LOG_SENSOR(...)
+#define LOG_TEXT_SENSOR(...)

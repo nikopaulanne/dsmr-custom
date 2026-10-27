@@ -2,7 +2,6 @@
  * NOTE: This is a vendored and modified version of a file from the
  * glmnet/Dsmr project. The original license is preserved below.
  *
- * Modifications are Copyright (c) 2025 (Niko Paulanne).
  * These modifications are licensed under the GPLv3, as part of the
  * dsmr_custom ESPHome component.
  *
@@ -48,7 +47,6 @@
  * @details Defines structures and macros for representing DSMR P1 telegram data fields.
  * This version includes modifications to the DEFINE_FIELD macro for ESPHome
  * compatibility and uses custom preprocessor defines for M-Bus channel IDs.
- * @author Niko Paulanne
  * @note This file is part of a vendored copy of the glmnet/arduino-dsmr parser.
  * It has been included and modified for the dsmr_custom ESPHome component.
  */

@@ -1,152 +1,254 @@
-# Testing Guide for dsmr_custom
+# Testing dsmr-custom
 
-## Automated Testing
+The automated checks cover configuration/code generation, firmware compilation,
+key and encrypted-frame validation, and the ESP-IDF AES-GCM wrapper. They do not
+replace testing with a real encrypted meter.
 
-### Compile Tests (Required Before Release)
+The runtime host test also compiles production `dsmr.cpp` and the parser against
+small ESPHome/UART/sensor stubs. It verifies rejected-CRC publication, custom
+overrides in both registration orders, multiple sensors for one code,
+configured M-Bus channels, wrapped values, numeric validity, frame size limits,
+nonblocking partial reception, timeouts, key changes and allocation failures.
+OpenSSL generates synthetic encrypted frames for the receive-path test;
+this checks the implementation's framing assumptions, not a real meter format.
 
-Run all compile tests locally:
+## Local tool setup
+
+Keep Python packages, ESPHome build output, and PlatformIO downloads outside the
+Git checkout. With `uv` installed, create an environment beside the repository:
 
 ```bash
-# Test Arduino ESP8266
-esphome compile test-configs/test-arduino-esp8266.yaml
-
-# Test ESP-IDF ESP32
-esphome compile test-configs/test-espidf-esp32.yaml
-
-# Test ESP-IDF ESP32-C6
-esphome compile test-configs/test-espidf-esp32c6.yaml
+uv venv --python 3.12 ../.venv-dsmr-custom
+uv pip install --python ../.venv-dsmr-custom/bin/python esphome==2026.9.0
 ```
 
-**Success Criteria:**
-- ✅ All three configurations compile without errors
-- ✅ No compiler warnings related to framework compatibility
-- ✅ Binary files are generated successfully
+Python 3.12 or newer is required by current ESPHome. To match the latest
+ESPHome/Python versions used during development, Python 3.14 also works with
+ESPHome 2026.9.0. The minimum-version checks used a separate Python 3.12
+environment with `esphome==2025.5.0`. Keep separate environments and build
+directories when comparing releases; run PlatformIO builds sequentially if
+they share package storage.
 
-### GitHub Actions
+Set ESPHome and PlatformIO storage outside the checkout before compiling:
 
-All pull requests automatically run compile tests. Check the Actions tab for results.
+```bash
+export ESPHOME_DATA_DIR="$(cd .. && pwd)/.esphome-data"
+export ESPHOME_BUILD_PATH="build"
+export PLATFORMIO_CORE_DIR="$(cd .. && pwd)/.platformio"
+```
 
-## Manual Runtime Testing
+The examples below use the isolated executable. Adjust its path if you chose a
+different environment:
 
-### Minimum Testing (Required)
+```bash
+ESPHOME="../.venv-dsmr-custom/bin/esphome"
+```
 
-Test on your D1 Mini hardware:
+## Host tests
 
-1. Flash the Arduino ESP8266 test configuration
-2. Verify device boots and connects to WiFi
-3. Verify P1 telegrams are received
-4. Verify sensors update correctly in Home Assistant
-5. Check logs for any errors or warnings
-6. Monitor heap memory for stability (no leaks)
+The host tests need CMake, a C++ compiler, and OpenSSL development headers. They
+run without ESP hardware:
 
-**Success Criteria:**
-- ✅ Device boots successfully
-- ✅ WiFi connects
-- ✅ P1 data is received and parsed
-- ✅ No error messages in logs
-- ✅ Heap memory remains stable over 1 hour
+```bash
+cmake -S tests -B ../.dsmr-custom-host-tests
+cmake --build ../.dsmr-custom-host-tests --parallel
+ctest --test-dir ../.dsmr-custom-host-tests --output-on-failure
+```
 
-### Community Testing (Recommended)
+To repeat the sanitizer checks with a compiler that supports them:
 
-For ESP-IDF validation, community testing is essential:
+```bash
+cmake -S tests -B ../.dsmr-custom-host-sanitized \
+  -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+  -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+cmake --build ../.dsmr-custom-host-sanitized --parallel
+ctest --test-dir ../.dsmr-custom-host-sanitized --output-on-failure
+```
 
-1. Create GitHub Issue with testing request
-2. Provide clear instructions (see template below)
-3. Wait for at least 2 successful ESP-IDF test reports
-4. Address any issues found before stable release
+The AES-GCM test compiles the component's ESP-IDF 5 hardware AES-GCM and
+ESP-IDF 6+ PSA Crypto branches against host shims backed by OpenSSL. It checks a
+published AES-128-GCM known-answer vector and rejects a modified authentication
+tag. These shims check the source branches, not actual ESP-IDF 6+ compilation;
+the target matrix currently compiles against the ESPHome-provided ESP-IDF.
 
-## Release Checklist
+Run configuration and source-generation regressions using the installed
+ESPHome environment:
 
-### Pre-Release
+```bash
+../.venv-dsmr-custom/bin/python tests/test_configuration.py
+```
 
-- [ ] All compile tests pass locally
-- [ ] GitHub Actions CI passes
-- [ ] D1 Mini runtime testing completed successfully
-- [ ] No regression from previous version
-- [ ] CHANGELOG.md updated
-- [ ] README.md updated with framework information
-- [ ] Version number bumped in code/documentation
+These tests use temporary directories outside the checkout and perform no
+toolchain downloads. They validate keys and native sensor properties, then
+generate and check C++ field lists for custom-only, telegram-only,
+numeric-plus-telegram and repeated standard sensor/text sensor blocks. They also
+check archive discovery for IDF 5's port-wrapper/upstream TLS layout and the
+IDF 5/6 crypto archive names. CI runs
+them with both ESPHome versions before the ESP8266 matrix build. The compile
+fixtures also include custom numeric/text sensors, filters, an automation, and
+multiple standard sensor blocks.
 
-### Beta Release (v1.1.0-beta.1)
+## ESPHome configuration and compile matrix
 
-- [ ] Tagged as pre-release on GitHub
-- [ ] Community testing issue created
-- [ ] Testing period: minimum 1-2 weeks
-- [ ] At least 2 community testers recruited
+Each configuration uses dummy Wi-Fi/API credentials and a synthetic decryption
+key; these values are for compile-only tests and must never be used on a real
+network. They build the encrypted receive path for every framework:
 
-### Release Candidate (v1.1.0-rc.1)
+| Configuration | Target |
+|---|---|
+| `test-arduino-esp8266.yaml` | ESP8266 Arduino |
+| `test-arduino-esp32.yaml` | ESP32 Arduino |
+| `test-espidf-esp32.yaml` | ESP32 ESP-IDF |
+| `test-espidf-esp32c6.yaml` | ESP32-C6 ESP-IDF |
 
-- [ ] At least 2 successful ESP-IDF community tests
-- [ ] At least 1 ESP32-C6 test report
-- [ ] All critical bugs from beta fixed
-- [ ] Documentation reviewed
+Run validation and compile all four:
 
-### Stable Release (v1.1.0)
+```bash
+for config in test-configs/*.yaml; do
+  "$ESPHOME" config "$config" || exit 1
+  "$ESPHOME" compile "$config" || exit 1
+done
+```
 
-- [ ] No critical issues reported for 1 week
-- [ ] All tests passed
-- [ ] Community feedback positive
-- [ ] Release notes finalized
+The same four builds run in GitHub Actions against the documented minimum
+ESPHome release (2025.5.0) and the current release. CI uses Python 3.12 and runs
+weekly so new ESPHome releases are checked without waiting for a project change.
 
-## Community Testing Issue Template
+Local verification of the 2026-10-02 fixes passed all eight matrix builds with
+ESPHome 2025.5.0 and 2026.9.0. Host tests passed 4/4, including under AddressSanitizer
+and UndefinedBehaviorSanitizer; configuration regressions passed 6/6 with each
+ESPHome version. The example configuration generated with both versions and its
+ESP8266 firmware compiled with 2026.9.0 using dummy local secrets and a local
+component source.
 
-Use this template when requesting community testing:
+GitHub PR #15 CI on 2026-10-27 also passed the host job and all eight firmware
+jobs with ESPHome 2025.5.0 and 2026.10.0 (the actual `latest` job version).
+Both configuration regression jobs passed 6/6. The initial successful run is
+[40478428968](https://github.com/nikopaulanne/dsmr-custom/actions/runs/40478428968);
+release preparation also checks the final PR and merged main commit.
 
-```markdown
-# 🧪 Beta Testing: ESP-IDF Framework Support (v1.1.0-beta.1)
+An additional local check, repeated for the runtime fixes on 2026-10-02, used
+ESPHome 2026.9.0's native ESP-IDF toolchain with ESP-IDF 6.0.1 on ESP32. The
+firmware compiled and linked. The
+reproducible test configuration is `test-configs/manual/test-espidf6-native.yaml`:
 
-## Overview
+```bash
+"$ESPHOME" --toolchain esp-idf compile test-configs/manual/test-espidf6-native.yaml
+```
 
-I've implemented ESP-IDF framework support but can only test on ESP8266 D1 Mini. 
-Community testing is needed to validate ESP-IDF builds.
+The PlatformIO route was also checked with ESP-IDF 6.0.1 using
+`test-configs/manual/test-espidf6-pio.yaml`. Its first clean build compiled the
+component but stopped at bootloader linking because the generated `bootloader.ld`
+script had not been preprocessed. Run this command once to generate the Ninja
+files; the first attempt is expected to stop at the bootloader linker-script
+error:
 
-## Testing Needed
+```bash
+"$ESPHOME" --toolchain platformio compile test-configs/manual/test-espidf6-pio.yaml
+```
 
-If you have any of these devices, please help test:
-- ✅ ESP32 (any variant) with ESP-IDF
-- ✅ ESP32-C6
-- ✅ ESP32-H2
-- ✅ ESP32-S3
+Then preprocess the generated linker script and retry the build:
 
-## How to Test
+```bash
+ninja -C "$ESPHOME_DATA_DIR/build/test-espidf6-pio/.pioenvs/test-espidf6-pio/bootloader" bootloader_ld_in_preprocess
+"$ESPHOME" --toolchain platformio compile test-configs/manual/test-espidf6-pio.yaml
+```
 
-1. Add to your YAML:
+The retry compiled and linked the full firmware. It also ran `post_build.py`,
+which found and linked IDF 6's `tfpsacrypto` archive. The workaround affects
+only the generated build directory; the native `esp-idf` toolchain builds IDF
+6.0.1 without it. ESPHome has deprecated the PlatformIO toolchain and plans to
+remove it in 2027.2.0, so native `esp-idf` remains the preferred path. The
+2026-10-02 PlatformIO recheck reused the previously preprocessed bootloader
+script; it passed the updated component and archive-linking code, but does not
+establish that a fresh PlatformIO IDF 6 build no longer needs this workaround.
+
+## Hardware smoke test
+
+On 2026-09-27, the local component was installed over the air on a Slimmelezer
+running the Arduino framework. The build and OTA install completed, the device
+reconnected to Home Assistant, and live P1 data updated energy, power, voltage,
+and current sensors. Consecutive telegrams showed changing live power values.
+
+This check used Home Assistant Core 2026.9.3 and ESPHome Device Builder
+2026.9.0. Earlier Home Assistant releases are outside the current support
+target. The meter stream was unencrypted, so this does not validate decryption.
+
+### Repeat test on 2026-10-02 — passed
+
+After the parser/publication and receive-loop fixes, the maintainer repeated
+installation of the updated local component on the Slimmelezer D1 Mini
+(ESP8266, Arduino) using ESPHome Device Builder 2026.9.1. Compilation succeeded;
+the maintainer confirmed that the upload completed and the device ran correctly
+with unencrypted meter data. This verifies the local working-tree changes,
+not an installation from the future `v1.3.0` Git tag. The Home Assistant Core
+version was not recorded again for this repeat test.
+
+The supplied install log contains the successful build and start of OTA; the
+excerpt ends during upload. Upload completion and runtime operation are based
+on the maintainer's confirmation. No post-install runtime log or extended
+stability measurement is included in that excerpt.
+
+The initial warning reported an existing PlatformIO HTTP cache directory during
+package prefetch. ESPHome fell back to serial downloading for the unresolved
+package, and the build completed successfully. This was a package-cache warning
+rather than a component compilation failure. The OTA transport was encrypted;
+the P1 meter data in this test was unencrypted.
+
+### Follow-up on 2026-10-27
+
+The maintainer reconfirmed that the local component was working correctly on
+his D1 Mini. This is additional confirmation of the existing unencrypted
+installation; no new ESPHome/Home Assistant version or measured uptime was
+reported. Installation from the published `v1.3.0` tag remains a separate
+release-distribution check.
+
+### Procedure for local Slimmelezer checks
+
+1. Keep a copy of the working device YAML and firmware. Copy the updated
+   `components/dsmr_custom` directory into the Device Builder configuration
+   directory as `components/dsmr_custom`.
+2. In the existing device YAML, replace its Git external-component source with
+   the local source below. Keep the device name, sensor names/IDs, UART pins,
+   network/API settings and existing secrets.
+
 ```yaml
 external_components:
   - source:
-      type: git
-      url: https://github.com/nikopaulanne/dsmr-custom
-      ref: v1.1.0-beta.1
-    components: [ dsmr_custom ]
-    refresh: 0s
+      type: local
+      path: components
+    components: [dsmr_custom]
 ```
 
-2. Set your framework:
-```yaml
-esp32:
-  board: your-board-here
-  framework:
-    type: esp-idf
-```
+3. Build and install wirelessly on the existing Slimmelezer. The local source
+   above selects the changed component files.
+4. Confirm that the device reconnects to the ESPHome API and Home Assistant.
+   Watch several consecutive telegrams: energy values should be plausible and
+   power/current values should update as the load changes.
+5. Check the logs for CRC failures, receive timeouts, buffer overflow/allocation
+   errors or reboots. Verify the expected Home Assistant entities and Energy
+   dashboard sources still receive values. Record the commit, ESPHome version,
+   framework, Home Assistant version and result.
+6. After the release tag exists, repeat installation from `ref: v1.3.0` before
+   announcing that tag as verified on the device.
 
-3. Compile, flash, and test
-4. Report results below
+This unencrypted-device check does not validate encrypted-meter operation.
 
-## What to Report
+## What these tests establish
 
-Please provide:
-- Board type: (e.g., ESP32-C6-DevKitC-1)
-- Framework: (esp-idf)
-- ESPHome version: (e.g., 2025.11.2)
-- Compile result: ✅ Success / ❌ Failed
-- Flash result: ✅ Success / ❌ Failed
-- Runtime result: ✅ Working / ❌ Issues
-- Any errors or warnings:
+- ESPHome can validate, generate, compile, and link the component for each
+  listed board/framework combination.
+- The C++ key parser rejects malformed hexadecimal input; encrypted frame sizing
+  rejects empty and oversized payloads.
+- The ESP-IDF 5 and PSA Crypto source branches compile in the host harness,
+  which also checks an AES-GCM known-answer vector and rejects a bad tag. This
+  supplements the successful native ESP-IDF 6.0.1 ESP32 target build above.
+- A real Slimmelezer Arduino device received and published unencrypted P1 data
+  after the local OTA update, as described above.
+- No real meter telegram or decryption key is used by CI.
 
-## Timeline
-
-- Beta period: 2 weeks from today
-- Target stable release: [DATE]
-
-Thank you for helping improve dsmr_custom! 🙏
-```
+The Arduino `rweather/Crypto` implementation is compile-tested here, but the
+host AES-GCM known-answer test targets the ESP-IDF wrapper. Physical encrypted
+meter operation remains experimental and field-unverified because the project
+has no hardware that receives encrypted telegrams. Users who test it should
+report their board, ESPHome version, framework, meter family, and result.
