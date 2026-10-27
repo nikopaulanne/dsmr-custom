@@ -121,6 +121,12 @@ ESPHome version. The example configuration generated with both versions and its
 ESP8266 firmware compiled with 2026.9.0 using dummy local secrets and a local
 component source.
 
+GitHub PR #15 CI on 2026-10-27 also passed the host job and all eight firmware
+jobs with ESPHome 2025.5.0 and 2026.10.0 (the actual `latest` job version).
+Both configuration regression jobs passed 6/6. The initial successful run is
+[40478428968](https://github.com/nikopaulanne/dsmr-custom/actions/runs/40478428968);
+release preparation also checks the final PR and merged main commit.
+
 An additional local check, repeated for the runtime fixes on 2026-10-02, used
 ESPHome 2026.9.0's native ESP-IDF toolchain with ESP-IDF 6.0.1 on ESP32. The
 firmware compiled and linked. The

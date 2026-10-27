@@ -2,7 +2,7 @@
 
 **Latest release:** v1.3.0
 
-**ESPHome Compatibility (current source):** ESPHome 2025.5.0 is the minimum build-tested release. All four framework/board profiles also passed with ESPHome 2026.9.0 on 2026-10-02. The updated local component also passed a Slimmelezer D1 Mini build, OTA and unencrypted runtime smoke test with ESPHome 2026.9.1; CI checks the latest release weekly.
+**ESPHome Compatibility (current source):** ESPHome 2025.5.0 is the minimum build-tested release. All four framework/board profiles passed locally with ESPHome 2026.9.0 on 2026-10-02 and in GitHub CI with ESPHome 2025.5.0 and 2026.10.0 on 2026-10-27. The updated local component also passed a Slimmelezer D1 Mini build, OTA and unencrypted runtime smoke test with ESPHome 2026.9.1; CI checks the latest release weekly.
 
 **Home Assistant target:** Home Assistant Core 2026.9.3. Earlier Home Assistant releases are outside the current support target. The original Slimmelezer test used ESPHome Device Builder 2026.9.0; the repeat test on 2026-10-02 passed with 2026.9.1 after the latest parser and receive-loop fixes. The Home Assistant Core version was not recorded again for this repeat test.
 
